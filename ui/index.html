@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TES — Tech Effectiveness Service</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:            #f5f4f0;
+      --surface:       #ffffff;
+      --surface-2:     #f0efe9;
+      --border:        #e2e0d8;
+      --border-strong: #c8c5ba;
+      --ink:           #1a1917;
+      --ink-2:         #4a4844;
+      --ink-3:         #8a8780;
+      --score-auto:    #b45309;
+      --accent-teal:   #0d7c6e;
+      --accent-amber:  #b45309;
+      --accent-violet: #6d28d9;
+      --accent-red:    #b91c1c;
+      --accent-green:  #166534;
+      --radius-sm: 4px;
+      --radius:    8px;
+      --font-serif: 'Instrument Serif', Georgia, serif;
+      --font-mono:  'DM Mono', monospace;
+      --font-body:  'DM Sans', sans-serif;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: var(--font-body); background: var(--bg); color: var(--ink); min-height: 100vh; line-height: 1.6; }
+    button { cursor: pointer; border: none; background: none; font-family: inherit; }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-mark {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      padding: 3px 7px;
+      border: 1.5px solid var(--ink);
+      border-radius: 3px;
+    }
+    .logo-name { font-size: 13px; font-weight: 500; color: var(--ink-2); letter-spacing: 0.02em; }
+    .header-right { display: flex; align-items: center; gap: 8px; }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #16a34a; animation: blink 2.5s ease infinite; }
+    .status-dot.offline { background: #ef4444; animation: none; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .status-text { font-size: 12px; color: var(--ink-3); font-family: var(--font-mono); }
+
+    /* Hero — centered */
+    .hero {
+      padding: 56px 40px 44px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      text-align: center;
+    }
+    .hero h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(28px, 4vw, 44px);
+      font-weight: 400;
+      line-height: 1.15;
+      color: var(--ink);
+      max-width: 600px;
+      margin: 0 auto 14px;
+    }
+    .hero h1 em { font-style: italic; color: var(--accent-teal); }
+    .hero-sub {
+      font-size: 15px;
+      color: var(--ink-3);
+      max-width: 520px;
+      font-weight: 300;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    main { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
+
+    /* Catalog stats — right aligned */
+    .catalog-stats {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+      justify-content: flex-end;
+    }
+    .stat-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 12px;
+      color: var(--ink-2);
+      background: var(--surface);
+    }
+    .stat-pill strong { font-family: var(--font-mono); font-weight: 500; color: var(--ink); }
+
+    /* Filter card */
+    .filter-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px 24px;
+      margin-bottom: 32px;
+    }
+    .filter-section-label { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .filter-section-sublabel { font-size: 12px; color: var(--ink-3); margin-left: 6px; font-weight: 400; }
+
+    /* Role input */
+    .role-input-wrap { position: relative; }
+    .role-input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-family: var(--font-body);
+      background: var(--surface);
+      color: var(--ink);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .role-input:focus { border-color: var(--accent-teal); }
+    .role-input::placeholder { color: var(--ink-3); }
+    .role-dropdown {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0; right: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      z-index: 200;
+      max-height: 300px;
+      overflow-y: auto;
+      display: none;
+    }
+    .role-dropdown.open { display: block; }
+    .role-option {
+      padding: 10px 14px;
+      display: flex; align-items: center; gap: 8px;
+      cursor: pointer;
+      font-size: 13px; color: var(--ink-2);
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    .role-option:last-child { border-bottom: none; }
+    .role-option:hover { background: var(--surface-2); color: var(--ink); }
+    .role-option.new-role { color: var(--accent-teal); border-top: 1px solid var(--border); }
+    .role-divider-label {
+      padding: 6px 14px 4px;
+      font-family: var(--font-mono); font-size: 10px;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--ink-3); background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0;
+    }
+    .role-icon { font-size: 15px; flex-shrink: 0; }
+
+    /* Tasks section */
+    .tasks-section-wrap { margin-top: 20px; }
+    .tasks-container {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .tasks-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+    }
+    .tasks-header-left { display: flex; align-items: center; gap: 10px; }
+    .tasks-header-title { font-size: 13px; font-weight: 600; color: var(--ink); }
+    .tasks-count { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+    .tasks-header-right { display: flex; align-items: center; gap: 8px; }
+    .select-all-btn {
+      font-size: 12px; color: var(--accent-teal); font-weight: 500;
+      padding: 3px 8px; border-radius: 4px;
+      border: 1px solid var(--accent-teal); background: transparent; transition: all 0.12s;
+    }
+    .select-all-btn:hover { background: #f0faf8; }
+    .add-task-btn {
+      width: 26px; height: 26px; border-radius: 50%;
+      border: 1.5px solid var(--accent-teal);
+      color: var(--accent-teal); background: transparent;
+      font-size: 18px; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; line-height: 1; padding-bottom: 1px;
+    }
+    .add-task-btn:hover { background: #f0faf8; }
+    .add-task-input-wrap {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      display: none;
+      background: #f0faf8;
+      gap: 8px;
+      align-items: center;
+    }
+    .add-task-input-wrap.visible { display: flex; }
+    .add-task-input {
+      flex: 1; padding: 7px 10px;
+      border: 1.5px solid var(--accent-teal);
+      border-radius: var(--radius-sm);
+      font-size: 13px; font-family: var(--font-body);
+      background: var(--surface); color: var(--ink); outline: none;
+    }
+    .add-task-submit {
+      padding: 7px 14px;
+      background: var(--accent-teal); color: white;
+      border-radius: var(--radius-sm); font-size: 12px; font-weight: 500;
+      border: none; cursor: pointer; transition: all 0.12s; white-space: nowrap;
+    }
+    .add-task-submit:hover { opacity: 0.85; }
+    .task-list-body { padding: 8px; display: flex; flex-direction: column; gap: 5px; }
+    .task-item {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      cursor: pointer; transition: all 0.12s;
+    }
+    .task-item:hover { border-color: var(--border-strong); background: var(--surface-2); }
+    .task-item.selected { border-color: var(--accent-teal); background: #f0faf8; }
+    .task-cb {
+      width: 16px; height: 16px;
+      border: 1.5px solid var(--border-strong); border-radius: 3px;
+      flex-shrink: 0; margin-top: 2px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; transition: all 0.12s;
+    }
+    .task-item.selected .task-cb { background: var(--accent-teal); border-color: var(--accent-teal); color: white; }
+    .task-text { font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+    .task-item.selected .task-text { color: var(--ink); }
+    .empty-msg { font-size: 13px; color: var(--ink-3); padding: 16px; }
+
+    /* Analyze button */
+    .analyze-wrap { padding: 4px 0 0; }
+    .analyze-btn {
+      display: inline-flex; align-items: center; gap: 9px;
+      padding: 11px 24px;
+      border-radius: var(--radius);
+      background: var(--ink); color: #fff;
+      font-size: 13px; font-weight: 600;
+      transition: all 0.15s;
+    }
+    .analyze-btn:hover:not(:disabled) { background: #333; transform: translateY(-1px); }
+    .analyze-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .analyze-btn .spinner {
+      width: 13px; height: 13px;
+      border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+      border-radius: 50%; animation: spin 0.7s linear infinite; display: none;
+    }
+    .analyze-btn.loading .spinner { display: block; }
+    .analyze-btn.loading .btn-icon { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-banner {
+      padding: 12px 16px; background: #fef2f2;
+      border: 1px solid #fecaca; border-radius: var(--radius);
+      color: var(--accent-red); font-size: 13px; margin-bottom: 16px; display: none;
+    }
+    .error-banner.visible { display: block; }
+
+    #results-section { display: none; }
+    #results-section.visible { display: block; }
+
+    .results-header {
+      display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+      padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 28px;
+    }
+    .results-title { font-family: var(--font-serif); font-size: 22px; font-weight: 400; color: var(--ink); }
+    .results-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+    .meta-chip {
+      padding: 2px 8px; border-radius: 100px;
+      font-size: 11px; font-family: var(--font-mono);
+      border: 1px solid var(--border); background: var(--surface); color: var(--ink-3);
+    }
+    .meta-chip.cached { border-color: #bbf7d0; color: var(--accent-green); background: #f0fdf4; }
+
+    .task-result { margin-bottom: 36px; }
+    .task-result-header {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border: 1px solid var(--border); border-bottom: none;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+    .task-index-label {
+      font-family: var(--font-mono); font-size: 10px; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--ink-3); background: var(--surface-2);
+      border: 1px solid var(--border); border-radius: 3px;
+      padding: 2px 7px; flex-shrink: 0; white-space: nowrap;
+    }
+    .task-result-pin { font-size: 12px; color: var(--ink-3); }
+    .task-result-name { font-size: 13px; font-weight: 600; color: var(--ink); flex: 1; }
+    .task-result-cached {
+      font-size: 10px; font-family: var(--font-mono);
+      padding: 2px 6px; border-radius: 3px;
+      background: #f0fdf4; color: var(--accent-green); border: 1px solid #bbf7d0;
+    }
+
+    .tool-cards {
+      border: 1px solid var(--border); border-top: none;
+      border-radius: 0 0 var(--radius) var(--radius); overflow: hidden;
+    }
+    .tool-card {
+      padding: 18px 20px; background: var(--surface);
+      border-top: 1px solid var(--border);
+      animation: fadeUp 0.3s ease both;
+    }
+    .tool-card:first-child { border-top: none; }
+    @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+
+    .tool-card-top { display: flex; align-items: flex-start; margin-bottom: 14px; }
+    .tool-info { flex: 1; }
+    .tool-name { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 5px; }
+    .tool-vendor-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 7px; border-radius: 3px;
+      font-size: 11px; font-weight: 500; font-family: var(--font-mono);
+    }
+    .tool-vendor-chip.anthropic { background: #f0faf8; color: var(--accent-teal); border: 1px solid #a7f3d0; }
+    .tool-vendor-chip.openai { background: #f5f3ff; color: var(--accent-violet); border: 1px solid #ddd6fe; }
+
+    .sub-offering-index-label {
+      font-family: var(--font-mono); font-size: 9px; font-weight: 600;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--accent-teal); background: #f0faf8;
+      border: 1px solid #a7f3d0; border-radius: 3px;
+      padding: 2px 7px; flex-shrink: 0; white-space: nowrap; margin-top: 2px;
+    }
+
+    .tool-auto-row { margin-bottom: 14px; }
+    .tool-auto-block { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+    .tool-auto-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+    .tool-auto-value { font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--score-auto); line-height: 1; }
+    .tool-auto-bar-wrap { width: 80px; }
+    .score-bar-track { height: 3px; background: var(--border); border-radius: 100px; overflow: hidden; }
+    .score-bar-fill { height: 100%; border-radius: 100px; width: 0%; transition: width 0.9s cubic-bezier(0.4,0,0.2,1); }
+    .score-bar-fill.auto { background: var(--score-auto); }
+
+    /* Capability cards — no per-capability score badge */
+    .capabilities-section { margin-top: 14px; }
+    .capabilities-label {
+      font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--ink-3); margin-bottom: 8px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .capabilities-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .cap-cards { display: flex; flex-direction: column; gap: 8px; }
+    .cap-card { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); overflow: hidden; }
+    .cap-card-header { padding: 10px 12px; display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none; }
+    .cap-card-header:hover { background: rgba(0,0,0,0.02); }
+    .cap-text { font-size: 12px; font-weight: 500; color: var(--ink); flex: 1; line-height: 1.4; }
+    .cap-toggle-arrow { font-size: 8px; color: var(--ink-3); flex-shrink: 0; margin-top: 3px; transition: transform 0.2s; }
+    .cap-card.open .cap-toggle-arrow { transform: rotate(90deg); }
+    .cap-card-body { display: none; padding: 0 12px 12px; border-top: 1px solid var(--border); }
+    .cap-card.open .cap-card-body { display: block; }
+    .cap-detail-section { margin-top: 10px; }
+    .cap-detail-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 3px; }
+    .cap-detail-text { font-size: 12px; color: var(--ink-2); line-height: 1.6; }
+    .cap-detail-text.warn { color: var(--accent-amber); }
+    .cap-source-block { margin-top: 10px; padding: 8px 10px; background: #f8f7f3; border: 1px solid var(--border); border-left: 3px solid var(--accent-teal); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+    .cap-source-url { display: block; font-size: 11px; font-family: var(--font-mono); color: var(--accent-teal); text-decoration: none; word-break: break-all; margin-bottom: 3px; }
+    .cap-source-url:hover { text-decoration: underline; }
+    .cap-source-location { font-size: 11px; color: var(--ink-2); margin-bottom: 3px; }
+    .cap-source-date { font-size: 10px; color: var(--ink-3); font-family: var(--font-mono); margin-bottom: 4px; }
+    .cap-exact-text { font-size: 11px; font-style: italic; color: var(--ink-2); line-height: 1.5; padding: 6px 8px; background: white; border-radius: 3px; border-left: 2px solid var(--border-strong); margin-top: 4px; }
+
+    .tool-detail-toggle {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 11px; color: var(--accent-teal); font-weight: 500;
+      cursor: pointer; background: none; border: none; padding: 0;
+      font-family: var(--font-body); margin-top: 12px;
+    }
+    .tool-detail-toggle:hover { opacity: 0.7; }
+    .tool-detail-toggle .arrow { transition: transform 0.2s; font-size: 8px; }
+    .tool-detail-toggle.open .arrow { transform: rotate(90deg); }
+    .tool-detail-body { display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .tool-detail-body.open { display: block; }
+    .detail-section { margin-bottom: 10px; }
+    .detail-section-title { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px; }
+    .detail-text { font-size: 12px; color: var(--ink-2); line-height: 1.6; }
+    .detail-text.limitation { color: var(--accent-red); }
+
+    .no-match-card { padding: 28px; text-align: center; background: var(--surface); border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius) var(--radius); }
+    .no-match-icon { font-size: 24px; margin-bottom: 8px; }
+    .no-match-text { font-size: 13px; color: var(--ink-3); }
+
+    .role-loading { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-3); padding: 16px; }
+    .loading-spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent-teal); border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; }
+
+    .source-evidence-block { margin-top: 10px; padding: 10px 12px; background: #f8f7f3; border: 1px solid var(--border); border-left: 3px solid var(--accent-teal); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+    .source-evidence-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 5px; }
+    .source-evidence-url { display: block; font-size: 11px; font-family: var(--font-mono); color: var(--accent-teal); text-decoration: none; word-break: break-all; margin-bottom: 4px; }
+    .source-evidence-url:hover { text-decoration: underline; }
+    .source-evidence-path { font-size: 11px; color: var(--ink-2); line-height: 1.5; }
+    .source-evidence-path .path-sep { color: var(--ink-3); margin: 0 3px; font-family: var(--font-mono); }
+
+    @media (max-width: 640px) {
+      header { padding: 0 16px; }
+      .hero  { padding: 32px 16px 28px; }
+      main   { padding: 20px 12px 60px; }
+      .filter-top-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <div class="logo-mark">TES</div>
+      <div class="logo-name">Tech Effectiveness Service</div>
+    </div>
+    <div class="header-right">
+      <div class="status-dot" id="status-dot"></div>
+      <div class="status-text" id="catalog-status">connecting…</div>
+    </div>
+  </header>
+
+  <div class="hero">
+    <h1>Find the right <em>AI tool</em><br>for every task</h1>
+    <p class="hero-sub">Pick your role, choose the tasks you work on — and we'll show you which AI tools can help, along with how much of the work they can handle automatically.</p>
+  </div>
+
+  <main>
+    <div id="error-banner" class="error-banner"></div>
+
+    <!-- Catalog stats — right aligned -->
+    <div class="catalog-stats" id="catalog-stats" style="display:none">
+      <div class="stat-pill">⚡ <strong id="stat-capabilities">—</strong> capabilities</div>
+      <div class="stat-pill">🗄 <strong id="stat-cached">—</strong> cached</div>
+    </div>
+
+    <!-- Filter card -->
+    <div class="filter-card">
+
+      <!-- Top row: Role label -->
+      <div style="margin-bottom:12px;">
+        <span class="filter-section-label">Role</span>
+        <span class="filter-section-sublabel">— search or type a custom role</span>
+      </div>
+
+      <!-- Role searchable input -->
+      <div class="role-input-wrap">
+        <input
+          type="text"
+          class="role-input"
+          id="role-input"
+          placeholder="e.g. Claims Examiner, Nurse, Pharmacy Reviewer…"
+          autocomplete="off"
+          oninput="onRoleInput(this.value)"
+          onfocus="openRoleDropdown()"
+        />
+        <div class="role-dropdown" id="role-dropdown"></div>
+      </div>
+
+      <!-- Tasks section — revealed after role is chosen -->
+      <div id="tasks-section" class="tasks-section-wrap" style="display:none">
+        <div class="tasks-container">
+          <div class="tasks-header">
+            <div class="tasks-header-left">
+              <span class="tasks-header-title">Tasks</span>
+              <span class="tasks-count" id="selected-count">0 selected</span>
+            </div>
+            <div class="tasks-header-right">
+              <button class="select-all-btn" id="select-all-btn" onclick="toggleSelectAll()" style="display:none">Select all</button>
+              <button class="add-task-btn" onclick="toggleAddTaskInput()" title="Add a task">+</button>
+            </div>
+          </div>
+          <div class="add-task-input-wrap" id="add-task-wrap">
+            <input
+              type="text"
+              class="add-task-input"
+              id="add-task-input"
+              placeholder="Describe a task and press Add…"
+              onkeydown="handleAddTaskKey(event)"
+            />
+            <button class="add-task-submit" onclick="submitCustomTask()">Add</button>
+          </div>
+          <div id="task-container" class="task-list-body"></div>
+        </div>
+
+        <div class="analyze-wrap">
+          <button class="analyze-btn" id="analyze-btn" disabled onclick="runAnalysis()">
+            <span class="btn-icon">→</span>
+            <div class="spinner"></div>
+            <span class="btn-label">Analyse automation potential</span>
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /filter-card -->
+
+    <!-- Results -->
+    <div id="results-section">
+      <div class="results-header">
+        <div class="results-title">Analysis results</div>
+        <div class="results-meta" id="results-meta"></div>
+      </div>
+      <div id="results-body"></div>
+    </div>
+  </main>
+
+  <script>
+    const API = (() => {
+      if (window.location.protocol === 'file:') return 'http://127.0.0.1:8000';
+      if (window.location.port === '8000') return '';
+      return 'http://127.0.0.1:8000';
+    })();
+
+    let selectedRole   = null;
+    let selectedTasks  = new Set();
+    let allTasks       = [];
+    let allRoles       = [];
+    let isCustomRole   = false;
+
+    const ROLE_ICONS = {
+      'Utilization Management (UM) Nurse': '🩺',
+      'Medical Director / Physician Reviewer': '👨‍⚕️',
+      'Prior Authorization Coordinator / Intake Specialist': '📋',
+      'Appeals Analyst / Appeals Coordinator': '⚖️',
+      'Claims Examiner': '🗂️',
+      'Member Services Representative': '📞',
+      'Pharmacy Benefits / PBM PA Reviewer': '💊',
+      'Physician': '🏥',
+      'Nurse': '🩻',
+      'Clinical Documentation Improvement (CDI) Specialist': '📝',
+      'Medical Coder': '🔢',
+      'Care Coordinator / Case Manager': '🤝',
+      'Prior Authorization Specialist': '✅',
+      'Revenue Cycle / Denials Specialist': '💰',
+      'Scheduling / Front Office / Patient Access': '📅',
+    };
+    const PAYER_ROLES = new Set([
+      'Utilization Management (UM) Nurse', 'Medical Director / Physician Reviewer',
+      'Prior Authorization Coordinator / Intake Specialist', 'Appeals Analyst / Appeals Coordinator',
+      'Claims Examiner', 'Member Services Representative', 'Pharmacy Benefits / PBM PA Reviewer',
+    ]);
+    const PROVIDER_ROLES = new Set([
+      'Physician', 'Nurse', 'Clinical Documentation Improvement (CDI) Specialist',
+      'Medical Coder', 'Care Coordinator / Case Manager', 'Prior Authorization Specialist',
+      'Revenue Cycle / Denials Specialist', 'Scheduling / Front Office / Patient Access',
+    ]);
+
+    function withTimeout(promise, ms) {
+      return Promise.race([promise, new Promise(resolve => setTimeout(() => resolve(null), ms))]);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      Promise.all([withTimeout(loadCatalogStats(), 5000), loadRoles()]);
+      document.addEventListener('click', e => {
+        if (!e.target.closest('.role-input-wrap')) {
+          document.getElementById('role-dropdown').classList.remove('open');
+        }
+      });
+    });
+
+    async function loadCatalogStats() {
+      try {
+        const stats = await fetch(`${API}/stats`).then(r => r.json());
+        document.getElementById('stat-capabilities').textContent = stats.capabilities ?? 0;
+        document.getElementById('stat-cached').textContent = stats.cached ?? 0;
+        document.getElementById('catalog-status').textContent = stats.capabilities > 0 ? `${stats.capabilities} capabilities` : 'run crawlers';
+        if (stats.capabilities > 0 || stats.cached > 0) document.getElementById('catalog-stats').style.display = 'flex';
+        document.getElementById('status-dot').className = 'status-dot';
+      } catch (e) {
+        document.getElementById('catalog-status').textContent = 'API offline';
+        document.getElementById('status-dot').className = 'status-dot offline';
+      }
+    }
+
+    async function loadRoles() {
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const data = await fetch(`${API}/roles`, { signal: controller.signal }).then(r => r.json());
+        clearTimeout(timer);
+        allRoles = data.roles || [];
+      } catch (e) {
+        allRoles = [];
+      }
+    }
+
+    function onRoleInput(value) {
+      renderRoleDropdown(value);
+    }
+
+    function openRoleDropdown() {
+      renderRoleDropdown(document.getElementById('role-input').value);
+    }
+
+    function renderRoleDropdown(query) {
+      const dropdown = document.getElementById('role-dropdown');
+      const q = (query || '').trim().toLowerCase();
+      let html = '';
+
+      if (!q) {
+        if (allRoles.length === 0) {
+          html = '<div style="padding:12px 14px;font-size:12px;color:var(--ink-3)">Loading roles…</div>';
+        } else {
+          const payer    = allRoles.filter(r => PAYER_ROLES.has(r));
+          const provider = allRoles.filter(r => PROVIDER_ROLES.has(r));
+          const other    = allRoles.filter(r => !PAYER_ROLES.has(r) && !PROVIDER_ROLES.has(r));
+          html += renderRoleGroup('Payers', payer);
+          html += renderRoleGroup('Providers', provider);
+          if (other.length) html += renderRoleGroup('Other', other);
+        }
+      } else {
+        const matches = allRoles.filter(r => r.toLowerCase().includes(q));
+        html += matches.map(r => roleOptionHtml(r)).join('');
+        const exactMatch = allRoles.some(r => r.toLowerCase() === q);
+        if (!exactMatch && query.trim()) {
+          html += `<div class="role-option new-role" data-new-role="${escHtml(query.trim())}">
+            <span>+ Use "<strong>${escHtml(query.trim())}</strong>" as a new role</span>
+          </div>`;
+        }
+        if (!matches.length && !query.trim()) {
+          html = '<div style="padding:12px 14px;font-size:12px;color:var(--ink-3)">Start typing to search…</div>';
+        }
+      }
+
+      dropdown.innerHTML = html;
+
+      dropdown.querySelectorAll('.role-option').forEach(el => {
+        el.addEventListener('click', () => {
+          const newRole = el.dataset.newRole;
+          const roleName = el.dataset.roleName;
+          if (newRole) pickRole(newRole, true);
+          else if (roleName) pickRole(roleName, false);
+        });
+      });
+
+      dropdown.classList.add('open');
+    }
+
+    function renderRoleGroup(label, roles) {
+      if (!roles.length) return '';
+      return `<div class="role-divider-label">${label}</div>` + roles.map(r => roleOptionHtml(r)).join('');
+    }
+
+    function roleOptionHtml(r) {
+      return `<div class="role-option" data-role-name="${escHtml(r)}">
+        <span class="role-icon">${ROLE_ICONS[r] || '👤'}</span>
+        <span>${escHtml(r)}</span>
+      </div>`;
+    }
+
+    async function pickRole(role, isNew) {
+      document.getElementById('role-input').value = role;
+      document.getElementById('role-dropdown').classList.remove('open');
+      selectedRole = role;
+      selectedTasks.clear();
+      isCustomRole = isNew;
+      allTasks = [];
+      document.getElementById('tasks-section').style.display = 'block';
+      updateAnalyzeBtn();
+
+      const tc = document.getElementById('task-container');
+      const selectAllBtn = document.getElementById('select-all-btn');
+
+      if (isNew) {
+        tc.innerHTML = '<div class="empty-msg">No predefined tasks for this role — use the + button to add tasks.</div>';
+        document.getElementById('add-task-wrap').classList.add('visible');
+        document.getElementById('add-task-input').focus();
+        selectAllBtn.style.display = 'none';
+        updateSelectedCount();
+      } else {
+        tc.innerHTML = '<div class="role-loading"><span class="loading-spinner"></span> Loading tasks…</div>';
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
+          const data = await fetch(`${API}/tasks-for-role?role=${encodeURIComponent(role)}`, { signal: controller.signal }).then(r => r.json());
+          clearTimeout(timer);
+          allTasks = data.tasks || [];
+          renderTasks(allTasks);
+          selectAllBtn.style.display = allTasks.length > 0 ? 'inline-flex' : 'none';
+        } catch (e) {
+          const msg = e.name === 'AbortError' ? 'Tasks request timed out.' : 'Could not load tasks.';
+          tc.innerHTML = `<div class="empty-msg">⚠ ${msg}</div>`;
+        }
+      }
+    }
+
+    function renderTasks(tasks) {
+      const tc = document.getElementById('task-container');
+      if (!tasks.length) { tc.innerHTML = '<div class="empty-msg">No tasks found for this role.</div>'; return; }
+      tc.innerHTML = tasks.map(t => `
+        <div class="task-item" data-task="${escHtml(t)}" onclick="toggleTask(this)">
+          <div class="task-cb">✓</div>
+          <div class="task-text">${escHtml(t)}</div>
+        </div>`).join('');
+      updateSelectedCount();
+    }
+
+    function toggleAddTaskInput() {
+      const wrap = document.getElementById('add-task-wrap');
+      wrap.classList.toggle('visible');
+      if (wrap.classList.contains('visible')) document.getElementById('add-task-input').focus();
+    }
+
+    function handleAddTaskKey(e) {
+      if (e.key === 'Enter') submitCustomTask();
+      if (e.key === 'Escape') document.getElementById('add-task-wrap').classList.remove('visible');
+    }
+
+    function submitCustomTask() {
+      const input = document.getElementById('add-task-input');
+      const task = input.value.trim();
+      if (!task) return;
+
+      if (!allTasks.includes(task)) allTasks.push(task);
+      selectedTasks.add(task);
+      input.value = '';
+
+      const tc = document.getElementById('task-container');
+      const emptyMsg = tc.querySelector('.empty-msg');
+      if (emptyMsg) emptyMsg.remove();
+
+      const existing = tc.querySelector(`[data-task="${CSS.escape(task)}"]`);
+      if (!existing) {
+        const newItem = document.createElement('div');
+        newItem.className = 'task-item selected';
+        newItem.dataset.task = task;
+        newItem.onclick = function() { toggleTask(this); };
+        newItem.innerHTML = `<div class="task-cb">✓</div><div class="task-text">${escHtml(task)}</div>`;
+        tc.appendChild(newItem);
+      }
+
+      if (allTasks.length > 0) document.getElementById('select-all-btn').style.display = 'inline-flex';
+      updateSelectedCount();
+      updateAnalyzeBtn();
+    }
+
+    function toggleTask(el) {
+      const task = el.dataset.task;
+      if (selectedTasks.has(task)) { selectedTasks.delete(task); el.classList.remove('selected'); }
+      else { selectedTasks.add(task); el.classList.add('selected'); }
+      updateSelectedCount();
+      updateAnalyzeBtn();
+    }
+
+    function toggleSelectAll() {
+      const items = document.querySelectorAll('.task-item');
+      const allSelected = selectedTasks.size >= items.length && items.length > 0;
+      selectedTasks.clear();
+      items.forEach(el => {
+        if (!allSelected) { selectedTasks.add(el.dataset.task); el.classList.add('selected'); }
+        else el.classList.remove('selected');
+      });
+      updateSelectedCount();
+      updateAnalyzeBtn();
+    }
+
+    function updateSelectedCount() { document.getElementById('selected-count').textContent = `${selectedTasks.size} selected`; }
+    function updateAnalyzeBtn() { document.getElementById('analyze-btn').disabled = selectedTasks.size === 0 || !selectedRole; }
+
+    async function runAnalysis() {
+      const btn = document.getElementById('analyze-btn');
+      btn.classList.add('loading'); btn.disabled = true;
+      hideError();
+      document.getElementById('results-section').classList.remove('visible');
+      const payload = { role: selectedRole, tasks: Array.from(selectedTasks), vendor: null };
+      try {
+        const res = await fetch(`${API}/recommend-tools`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        if (!res.ok) { const err = await res.json().catch(() => ({ detail: res.statusText })); throw new Error(err.detail || `HTTP ${res.status}`); }
+        const data = await res.json();
+        renderResults(data);
+        await loadCatalogStats();
+      } catch (e) {
+        showError(e.message || 'An error occurred. Is the API running?');
+      } finally {
+        btn.classList.remove('loading'); btn.disabled = false;
+      }
+    }
+
+    function renderResults(data) {
+      const section = document.getElementById('results-section');
+      const chips = [
+        `<span class="meta-chip">Role: ${escHtml(data.role)}</span>`,
+        `<span class="meta-chip">${data.total_tasks} task${data.total_tasks > 1 ? 's' : ''}</span>`,
+        data.tasks_from_cache > 0 ? `<span class="meta-chip cached">⚡ ${data.tasks_from_cache} cached</span>` : '',
+      ].filter(Boolean).join('');
+      document.getElementById('results-meta').innerHTML = chips;
+      document.getElementById('results-body').innerHTML = (data.recommendations || []).map((rec, i) => renderTaskResult(rec, i + 1)).join('');
+      section.classList.add('visible');
+      section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => {
+        document.querySelectorAll('.score-bar-fill').forEach(el => { el.style.width = el.dataset.pct + '%'; });
+      }, 100);
+    }
+
+    function renderTaskResult(rec, taskIndex) {
+      const allTools = rec.recommended_tools || [];
+      const seen = new Set();
+      const unique = allTools.filter(t => {
+        const key = (t.sub_offering || '').toLowerCase().trim();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+      const tools = unique.slice(0, 4);
+      const hasMatch = tools.length > 0 && (tools[0].tool_id != null);
+
+      const toolsHtml = hasMatch
+        ? tools.map((t, i) => renderToolCard(t, i + 1)).join('')
+        : `<div class="no-match-card">
+             <div class="no-match-icon">🔍</div>
+             <div class="no-match-text">No AI tools currently match this task in the catalog.</div>
+           </div>`;
+
+      return `<div class="task-result">
+        <div class="task-result-header">
+          <span class="task-index-label">Task ${taskIndex}</span>
+          <span class="task-result-pin">→</span>
+          <div class="task-result-name">${escHtml(rec.task)}</div>
+          ${rec.cached ? '<div class="task-result-cached">⚡ cached</div>' : ''}
+          ${rec.error ? `<div style="color:var(--accent-red);font-size:11px;">⚠ ${escHtml(rec.error)}</div>` : ''}
+        </div>
+        <div class="tool-cards">${toolsHtml}</div>
+      </div>`;
+    }
+
+    function renderToolCard(t, subOfferingIndex) {
+      const isOpenAI    = (t.vendor || '').toLowerCase().includes('openai');
+      const vendorClass = isOpenAI ? 'openai' : 'anthropic';
+      const vendorLabel = isOpenAI ? 'ChatGPT for Healthcare' : 'Claude for Healthcare';
+      const vendorIcon  = isOpenAI ? '💬' : '🤖';
+      const autoPct     = t.automation_percentage || 0;
+      const detailId    = `detail-${Math.random().toString(36).slice(2)}`;
+
+      const autoBlockHtml = autoPct > 0 ? `
+        <div class="tool-auto-row">
+          <div class="tool-auto-block">
+            <div class="tool-auto-label">Task automation</div>
+            <div class="tool-auto-value">${autoPct}%</div>
+            <div class="tool-auto-bar-wrap">
+              <div class="score-bar-track"><div class="score-bar-fill auto" data-pct="${autoPct}"></div></div>
+            </div>
+          </div>
+        </div>` : '';
+
+      const capDetails = t.capability_details || [];
+      const capCardsHtml = capDetails.length > 0
+        ? `<div class="capabilities-section">
+            <div class="capabilities-label">Matched capabilities (${capDetails.length})</div>
+            <div class="cap-cards">${capDetails.map(cd => renderCapCard(cd)).join('')}</div>
+           </div>`
+        : '';
+
+      return `<div class="tool-card">
+        <div class="tool-card-top">
+          <div class="tool-info">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+              <span class="sub-offering-index-label">Sub offering ${subOfferingIndex}</span>
+              <div class="tool-name" style="margin-bottom:0">${escHtml(t.sub_offering || 'Unknown Tool')}</div>
+            </div>
+            <span class="tool-vendor-chip ${vendorClass}">${vendorIcon} ${vendorLabel}</span>
+          </div>
+        </div>
+        ${autoBlockHtml}
+        ${capCardsHtml}
+        <button class="tool-detail-toggle" onclick="toggleDetail('${detailId}', this)">
+          <span class="arrow">▶</span> Overall reasoning &amp; limitations
+        </button>
+        <div class="tool-detail-body" id="${detailId}">
+          ${t.reasoning ? `<div class="detail-section"><div class="detail-section-title">Why this tool fits</div><div class="detail-text">${escHtml(t.reasoning)}</div></div>` : ''}
+          ${t.automation_explanation ? `<div class="detail-section"><div class="detail-section-title">Automation breakdown</div><div class="detail-text">${escHtml(t.automation_explanation)}</div></div>` : ''}
+          ${t.limitations ? `<div class="detail-section"><div class="detail-section-title">Overall limitations</div><div class="detail-text limitation">${escHtml(t.limitations)}</div></div>` : ''}
+          ${formatSourceEvidence(t.source_evidence)}
+        </div>
+      </div>`;
+    }
+
+    function renderCapCard(cd) {
+      const cardId = `cap-${Math.random().toString(36).slice(2)}`;
+      const source = cd.source || {};
+
+      const sourceHtml = (source.url || source.location || source.exact_text) ? `
+        <div class="cap-detail-section">
+          <div class="cap-detail-label">📍 Source &amp; Evidence</div>
+          <div class="cap-source-block">
+            ${source.url ? `<a class="cap-source-url" href="${escHtml(source.url)}" target="_blank" rel="noopener">🔗 ${escHtml(source.url)}</a>` : ''}
+            ${source.location ? `<div class="cap-source-location">📌 ${escHtml(source.location)}</div>` : ''}
+            ${source.date_extracted ? `<div class="cap-source-date">Extracted: ${escHtml(source.date_extracted.split('T')[0])}</div>` : ''}
+            ${source.exact_text ? `<div class="cap-exact-text">"${escHtml(source.exact_text)}"</div>` : ''}
+          </div>
+        </div>` : '';
+
+      return `<div class="cap-card" id="${cardId}">
+        <div class="cap-card-header" onclick="toggleCapCard('${cardId}')">
+          <div class="cap-text">${escHtml(cd.capability_text || '')}</div>
+          <span class="cap-toggle-arrow">▶</span>
+        </div>
+        <div class="cap-card-body">
+          ${cd.reason ? `<div class="cap-detail-section"><div class="cap-detail-label">How this helps</div><div class="cap-detail-text">${escHtml(cd.reason)}</div></div>` : ''}
+          ${cd.limitations ? `<div class="cap-detail-section"><div class="cap-detail-label">Limitations</div><div class="cap-detail-text warn">${escHtml(cd.limitations)}</div></div>` : ''}
+          ${sourceHtml}
+        </div>
+      </div>`;
+    }
+
+    function toggleCapCard(id) { document.getElementById(id).classList.toggle('open'); }
+    function toggleDetail(id, btn) { document.getElementById(id).classList.toggle('open'); btn.classList.toggle('open'); }
+
+    function formatSourceEvidence(evidence) {
+      if (!evidence) return '';
+      let url = null, locationPath = null;
+      const urlMatch = evidence.match(/URL:\s*(https?:\/\/[^\s|]+)/i);
+      if (urlMatch) url = urlMatch[1].trim();
+      const pipeIdx = evidence.indexOf('|');
+      if (pipeIdx !== -1) locationPath = evidence.slice(pipeIdx + 1).trim();
+      else if (!urlMatch) locationPath = evidence.trim();
+      let pathHtml = '';
+      if (locationPath) {
+        const segments = locationPath.split(' > ').map(s => s.trim()).filter(Boolean);
+        pathHtml = segments.map((seg, i) =>
+          (i > 0 ? '<span class="path-sep">›</span>' : '') + '<span>' + escHtml(seg) + '</span>'
+        ).join('');
+      }
+      return `<div class="source-evidence-block">
+        <div class="source-evidence-label">📍 Sub-offering Source</div>
+        ${url ? `<a class="source-evidence-url" href="${escHtml(url)}" target="_blank" rel="noopener">🔗 ${escHtml(url)}</a>` : ''}
+        ${pathHtml ? `<div class="source-evidence-path">${pathHtml}</div>` : ''}
+      </div>`;
+    }
+
+    function escHtml(str) {
+      if (str == null) return '';
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function showError(msg) { const el = document.getElementById('error-banner'); el.textContent = '⚠ ' + msg; el.classList.add('visible'); }
+    function hideError() { document.getElementById('error-banner').classList.remove('visible'); }
+  </script>
+</body>
+</html>

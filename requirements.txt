@@ -1,0 +1,27 @@
+# Core crawler dependencies
+playwright>=1.40.0
+playwright-stealth>=1.0.6
+beautifulsoup4>=4.12.0
+psycopg2-binary>=2.9.0
+
+# LLM client (provider-agnostic via OpenAI-compatible API)
+openai>=1.12.0
+
+# API
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+
+# Static file serving (for the UI)
+aiofiles>=23.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+
+# Anti-bot bypass
+curl-cffi>=0.7.0
+cloudscraper>=1.2.71
+
+# Vector similarity
+sentence-transformers>=2.7.0
+pgvector>=0.3.0
