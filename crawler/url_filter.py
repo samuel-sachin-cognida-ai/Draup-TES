@@ -1,4 +1,4 @@
-"""URL filtering, normalization, and healthcare-relevance checks."""
+"""URL filtering, normalization, and relevance checks."""
 from __future__ import annotations
 
 import re
@@ -6,16 +6,34 @@ from urllib.parse import urlparse
 
 from crawler.config import VendorConfig
 
-# Link-following: discovered URLs must contain at least one of these keywords
-_HEALTHCARE_LINK_KEYWORDS = [
+# Default link-following keywords used when no per-vendor keywords are configured.
+# Covers broad enterprise/industry signals so no valid sector page gets dropped.
+_DEFAULT_LINK_KEYWORDS = [
+    # industries / sectors
     "health", "clinical", "medical", "patient", "hospital",
     "hipaa", "ehr", "fhir", "hl7", "care", "pharmacy",
     "diagnostic", "radiology", "life-science", "lifescience",
     "wellness", "provider", "payer", "telehealth", "telemedicine",
+    "legal", "law", "contract", "litigation", "attorney", "counsel",
+    "compliance", "regulatory", "discovery",
+    "finance", "financial", "banking", "insurance", "investment",
+    "fintech", "capital", "trading", "fraud", "risk", "wealth",
+    "manufactur", "production", "supply-chain", "factory", "industrial",
+    "quality", "mes", "inventory", "procurement",
+    "hr", "human-resources", "employee", "workforce", "talent",
+    "recruiting", "onboarding", "payroll",
+    "government", "federal", "public-sector", "defense",
+    "education", "university", "school", "academic", "learning",
+    "retail", "ecommerce", "merchandis",
+    "energy", "utilities", "renewable", "grid",
+    "telecom", "5g", "network",
+    "media", "entertainment", "streaming", "publishing",
+    "security", "cybersecurity", "threat", "soc",
+    # generic enterprise signals
     "solution", "industry", "industries", "customer", "stories",
     "case-study", "enterprise", "connector", "workflow",
     "integration", "agent", "news", "blog", "tutorial", "resource",
-    "announcement", "use-case",
+    "announcement", "use-case", "product", "platform",
 ]
 
 _SKIP_EXTENSIONS = frozenset({
@@ -79,7 +97,7 @@ def is_allowed_url(url: str, cfg: VendorConfig) -> bool:
     return True
 
 
-def is_healthcare_relevant_link(
+def is_relevant_link(
     url: str,
     seed_set: frozenset,
     link_keywords: list[str] | None = None,
@@ -89,5 +107,5 @@ def is_healthcare_relevant_link(
     if link_keywords is not None and len(link_keywords) == 0:
         return True
     path = urlparse(url).path.lower()
-    keywords = link_keywords if link_keywords is not None else _HEALTHCARE_LINK_KEYWORDS
+    keywords = link_keywords if link_keywords is not None else _DEFAULT_LINK_KEYWORDS
     return any(kw in path for kw in keywords)

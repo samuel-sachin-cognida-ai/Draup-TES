@@ -120,7 +120,7 @@ def save_extracted_to_db(
     raw_data_id: int,
     url: str,
     extracted: dict,
-    module_offering_filter: str,
+    product_brand: str,
     discovered_sub_offerings: set[str],
     target_sub_offerings: int,
     stats: dict,
@@ -137,16 +137,18 @@ def save_extracted_to_db(
 
         inserted = duplicates = skipped = lang_skipped = 0
 
+        brand_lower = product_brand.strip().lower()
+
         for item in offerings:
-            mo = (item.get("module_offering") or "").strip().lower()
-            if mo != module_offering_filter.lower():
+            mo_raw = (item.get("module_offering") or "").strip()
+            # Accept any module_offering that contains the product brand and " for "
+            if not mo_raw or brand_lower not in mo_raw.lower() or " for " not in mo_raw.lower():
                 skipped += 1
                 with stats_lock:
                     stats["non_target_skipped"] = stats.get("non_target_skipped", 0) + 1
-                print(f"[FILTER] Skipped: {item.get('module_offering')!r} / {item.get('sub_offering')!r}")
+                print(f"[FILTER] Skipped (wrong brand/format): {mo_raw!r} / {item.get('sub_offering')!r}")
                 continue
 
-            item["module_offering"] = module_offering_filter
             item = prepare_offering_for_storage(item)
 
             sub = sanitize_string_field(item.get("sub_offering"), "sub_offering")

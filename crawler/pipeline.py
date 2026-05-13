@@ -14,7 +14,11 @@ import llm_client as llm
 from crawler.config import LLM_MODEL, REQUEST_DELAY_S, VendorConfig
 from crawler.fetcher import get_page_content
 from crawler.html_parser import extract_text_from_html
-from crawler.prompts import extraction_system_prompt, validate_and_quality_system_prompt
+from crawler.prompts import (
+    extraction_system_prompt,
+    validate_and_quality_system_prompt,
+    sector_key_from_module_offering,
+)
 from crawler.url_filter import normalize_url, is_allowed_url
 import crawler.state as state
 
@@ -103,7 +107,7 @@ def extract_from_page(
             raw_data_id=raw_data_id,
             url=url,
             extracted={"offerings": offerings},
-            module_offering_filter=cfg.module_offering,
+            product_brand=cfg.product_brand,
             discovered_sub_offerings=discovered,
             target_sub_offerings=cfg.target_sub_offerings,
             stats=stats,
@@ -158,8 +162,10 @@ def _char_jaccard(a: str, b: str) -> float:
     return len(ta & tb) / len(ta | tb)
 
 
-def post_vendor_validate_and_quality(
+def _run_pass2(
     cfg: VendorConfig,
+    module_offering: str,
+    sector: str,
     page: Page,
     visited: set[str],
     discovered: set[str],
@@ -169,7 +175,7 @@ def post_vendor_validate_and_quality(
     _is_rerun: bool = False,
 ) -> None:
     """
-    Combined Pass 2:
+    Combined Pass 2 for a single module_offering / sector:
       1. Language purge
       2. Exact-name dedup
       3. Near-name clustering (token overlap + Jaccard)
@@ -180,7 +186,7 @@ def post_vendor_validate_and_quality(
     """
     label = "VALIDATE+QUALITY" + (" [RERUN]" if _is_rerun else "")
     print("\n" + "=" * 65)
-    print(f"[{label}] {cfg.module_offering}")
+    print(f"[{label}] {module_offering}")
     print("=" * 65)
 
     # ── Read current state from DB ────────────────────────────────────────────
@@ -194,7 +200,7 @@ def post_vendor_validate_and_quality(
             WHERE module_offering = %s
             ORDER BY sub_offering, id;
             """,
-            (cfg.module_offering,),
+            (module_offering,),
         )
         rows = [dict(r) for r in cur.fetchall()]
     finally:
@@ -297,7 +303,7 @@ def post_vendor_validate_and_quality(
         completion = llm.create_chat_completion(
             model=LLM_MODEL,
             messages=[
-                {"role": "system", "content": validate_and_quality_system_prompt(cfg)},
+                {"role": "system", "content": validate_and_quality_system_prompt(cfg, module_offering=module_offering, sector=sector)},
                 {"role": "user",   "content": json.dumps(
                     {"offerings": audit_list, "crawled_urls": crawled_urls},
                     indent=2,
@@ -429,11 +435,69 @@ def post_vendor_validate_and_quality(
     # ── Recurse once if new offerings were added ──────────────────────────────
     if new_count > 0 and not _is_rerun:
         print(f"\n[{label}][GAP] Found {new_count} new offering(s) — re-running combined audit.")
-        post_vendor_validate_and_quality(
-            cfg, page, visited, discovered, stats, lock, jsonl_path,
+        _run_pass2(
+            cfg=cfg,
+            module_offering=module_offering,
+            sector=sector,
+            page=page,
+            visited=visited,
+            discovered=discovered,
+            stats=stats,
+            lock=lock,
+            jsonl_path=jsonl_path,
             _is_rerun=True,
         )
     else:
         if new_count == 0:
             print(f"[{label}][GAP] Targeted crawl yielded no new offerings.")
         print("=" * 65)
+
+
+def post_vendor_validate_and_quality(
+    cfg: VendorConfig,
+    page: Page,
+    visited: set[str],
+    discovered: set[str],
+    stats: dict,
+    lock: threading.Lock,
+    jsonl_path: str,
+    _is_rerun: bool = False,
+) -> None:
+    """Run Pass 2 for every module_offering discovered in the DB for this vendor."""
+    conn = db.get_pg_connection()
+    cur  = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT DISTINCT module_offering
+               FROM extracted_offerings
+               WHERE module_offering ILIKE %s
+               ORDER BY module_offering;""",
+            (f"%{cfg.product_brand}%",),
+        )
+        discovered_mos = [row[0] for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
+
+    if not discovered_mos:
+        log.info("[PASS2] No module offerings found in DB for brand '%s'.", cfg.product_brand)
+        return
+
+    log.info(
+        "[PASS2] Running validation for %d module offering(s) under '%s'.",
+        len(discovered_mos), cfg.product_brand,
+    )
+    for module_offering in discovered_mos:
+        sector = sector_key_from_module_offering(module_offering, cfg.product_brand)
+        _run_pass2(
+            cfg=cfg,
+            module_offering=module_offering,
+            sector=sector,
+            page=page,
+            visited=visited,
+            discovered=discovered,
+            stats=stats,
+            lock=lock,
+            jsonl_path=jsonl_path,
+            _is_rerun=_is_rerun,
+        )

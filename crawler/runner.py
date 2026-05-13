@@ -23,7 +23,7 @@ from crawler.config import (
 from crawler.fetcher import apply_stealth, get_page_content
 from crawler.html_parser import extract_text_from_html, extract_links, random_ua
 from crawler.pipeline import extract_from_page, post_vendor_validate_and_quality
-from crawler.url_filter import normalize_url, is_allowed_url, is_healthcare_relevant_link
+from crawler.url_filter import normalize_url, is_allowed_url, is_relevant_link
 
 log = logging.getLogger("crawler.runner")
 
@@ -33,7 +33,7 @@ _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 
 def _jsonl_path(slug: str) -> str:
     os.makedirs(_DATA_DIR, exist_ok=True)
-    return os.path.join(_DATA_DIR, f"{slug}_healthcare_data.jsonl")
+    return os.path.join(_DATA_DIR, f"{slug}_data.jsonl")
 
 
 def _browser_args() -> list[str]:
@@ -71,7 +71,7 @@ def _browser_context_kwargs(proxy_url: str) -> dict:
 
 def crawl_vendor(cfg: VendorConfig) -> dict:
     log.info("=" * 70)
-    log.info("[START] %-30s  module='%s'", cfg.name, cfg.module_offering)
+    log.info("[START] %-30s  brand='%s'", cfg.name, cfg.product_brand)
     log.info("=" * 70)
 
     jsonl_path = _jsonl_path(cfg.slug)
@@ -119,8 +119,9 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
             except Exception:
                 pass
 
+        max_pages = cfg.max_pages or MAX_PAGES_PER_VENDOR
         with ThreadPoolExecutor(max_workers=LLM_WORKERS) as executor:
-            while frontier and stats["pages_visited"] < MAX_PAGES_PER_VENDOR:
+            while frontier and stats["pages_visited"] < max_pages:
                 if state.stop_requested:
                     log.warning("[STOP] Stopping %s early.", cfg.name)
                     break
@@ -146,7 +147,7 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
                 log.info(
                     "[CRAWL] %-12s [%d/%d] %s",
                     cfg.slug, stats["pages_visited"] + 1,
-                    MAX_PAGES_PER_VENDOR, url,
+                    max_pages, url,
                 )
 
                 html, final_url = get_page_content(page, url, cfg.browser_mode, cfg.extra_wait_ms)
@@ -185,7 +186,7 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
                     if (
                         link_norm not in visited
                         and is_allowed_url(link, cfg)
-                        and is_healthcare_relevant_link(link, seed_set, cfg.link_keywords)
+                        and is_relevant_link(link, seed_set, cfg.link_keywords)
                     ):
                         frontier.append(link)
 
@@ -219,7 +220,7 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
     if discovered:
         log.info(
             "[OFFERINGS] %d unique sub-offerings for '%s':",
-            len(discovered), cfg.module_offering,
+            len(discovered), cfg.product_brand,
         )
         for i, name in enumerate(sorted(discovered), 1):
             log.info("  %2d. %s", i, name)
@@ -240,57 +241,77 @@ def main() -> None:
         datefmt="%H:%M:%S",
     )
 
+    # Build a name→slugs index for vendor-name resolution
+    _name_index: dict[str, list[str]] = {}
+    for _slug, _cfg in VENDOR_CONFIGS.items():
+        _name_index.setdefault(_cfg.name.lower(), []).append(_slug)
+
+    _valid_names = sorted({c.name for c in VENDOR_CONFIGS.values()})
+
     parser = argparse.ArgumentParser(
         prog="generic_crawler",
         description=(
-            "Healthcare AI crawler — 2-pass LLM pipeline "
-            "(extract+validate -> audit+quality) for 10 vendors"
+            "AI capabilities crawler — 2-pass LLM pipeline "
+            "(extract+validate -> audit+quality) across sectors and vendors"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  python generic_crawler.py\n"
-            "  python generic_crawler.py --vendor aws_bedrock\n"
-            "  python generic_crawler.py --vendor openai --vendor anthropic\n"
+            "  python generic_crawler.py                          # all vendors, all sectors\n"
+            "  python generic_crawler.py --vendor anthropic       # all Anthropic sectors\n"
+            "  python generic_crawler.py --vendor openai --vendor harvey\n"
             "  python generic_crawler.py --group enterprise_ai\n"
             "  python generic_crawler.py --list\n"
+            "\nVendor names: " + ", ".join(_valid_names)
         ),
     )
     parser.add_argument(
-        "--vendor", metavar="SLUG", action="append", dest="vendors",
-        help="Vendor slug to crawl (repeatable). Use --list to see all slugs.",
+        "--vendor", metavar="NAME", action="append", dest="vendors",
+        help=(
+            "Vendor name to crawl — runs ALL sectors for that vendor (repeatable). "
+            "e.g. --vendor anthropic  runs healthcare + legal + financial. "
+            "Use --list to see all vendors and their sectors."
+        ),
     )
     parser.add_argument(
         "--group", metavar="GROUP",
         choices=["frontier_llm", "cloud_platform", "enterprise_ai", "vertical_ai"],
-        help="Crawl all vendors in this group.",
+        help="Crawl all vendors in this group (all sectors).",
     )
     parser.add_argument(
         "--list", action="store_true",
-        help="Print configured vendors and exit.",
+        help="Print all vendors, their sectors, and module offerings, then exit.",
     )
     args = parser.parse_args()
 
     if args.list:
-        groups: dict[str, list] = {}
+        # Group by vendor name, then sector within each vendor
+        by_vendor: dict[str, list[tuple[str, VendorConfig]]] = {}
         for slug, cfg in VENDOR_CONFIGS.items():
-            groups.setdefault(cfg.group, []).append((slug, cfg))
-        for grp, entries in groups.items():
-            print(f"\n  {grp}")
+            by_vendor.setdefault(cfg.name, []).append((slug, cfg))
+        for vendor_name, entries in by_vendor.items():
+            print(f"\n  {vendor_name}")
             for slug, cfg in entries:
-                print(f"    {slug:<24} {cfg.name:<16} -> '{cfg.module_offering}'")
+                print(f"    [{cfg.group:<20}]  {cfg.product_brand}")
         print()
         return
 
     if args.vendors:
         targets: dict[str, VendorConfig] = {}
-        for slug in args.vendors:
-            if slug not in VENDOR_CONFIGS:
+        for vendor_arg in args.vendors:
+            key = vendor_arg.lower()
+            if key in _name_index:
+                # Match by vendor name — picks up all sectors
+                for slug in _name_index[key]:
+                    targets[slug] = VENDOR_CONFIGS[slug]
+            elif vendor_arg in VENDOR_CONFIGS:
+                # Fallback: exact slug still works
+                targets[vendor_arg] = VENDOR_CONFIGS[vendor_arg]
+            else:
                 parser.error(
-                    f"Unknown vendor slug: {slug!r}\n"
-                    f"Valid slugs: {', '.join(VENDOR_CONFIGS)}"
+                    f"Unknown vendor: {vendor_arg!r}\n"
+                    f"Valid vendor names: {', '.join(_valid_names)}"
                 )
-            targets[slug] = VENDOR_CONFIGS[slug]
     elif args.group:
         targets = {s: c for s, c in VENDOR_CONFIGS.items() if c.group == args.group}
     else:
@@ -318,18 +339,18 @@ def main() -> None:
 
     # ── Summary ───────────────────────────────────────────────────────────────
     print("\n" + "=" * 80)
-    print("  HEALTHCARE CRAWL SUMMARY  (2-pass: extract+validate -> audit+quality)")
+    print("  CRAWL SUMMARY  (2-pass: extract+validate -> audit+quality)")
     print("=" * 80)
     total_new = 0
     for slug, stats in all_stats.items():
         cfg = VENDOR_CONFIGS[slug]
         if "error" in stats:
-            print(f"  {cfg.module_offering:<42} ERROR: {stats['error']}")
+            print(f"  {cfg.product_brand:<42} ERROR: {stats['error']}")
         else:
             n = stats.get("extracted_saved", 0)
             total_new += n
             print(
-                f"  {cfg.module_offering:<42} "
+                f"  {cfg.product_brand:<42} "
                 f"pages={stats.get('pages_visited', 0):>3}  "
                 f"new={n:>3}  "
                 f"dupes={stats.get('duplicates_skipped', 0):>3}  "
@@ -338,5 +359,5 @@ def main() -> None:
                 f"q_gap_pages={stats.get('quality_pages_crawled', 0):>2}  "
                 f"q_new={stats.get('quality_new_found', 0):>2}"
             )
-    print(f"\n  Total healthcare offerings persisted: {total_new}")
+    print(f"\n  Total offerings persisted: {total_new}")
     print("=" * 80)

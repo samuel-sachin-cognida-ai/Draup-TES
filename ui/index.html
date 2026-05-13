@@ -337,8 +337,17 @@
       padding: 2px 7px; border-radius: 3px;
       font-size: 11px; font-weight: 500; font-family: var(--font-mono);
     }
-    .tool-vendor-chip.anthropic { background: #f0faf8; color: var(--accent-teal); border: 1px solid #a7f3d0; }
-    .tool-vendor-chip.openai { background: #f5f3ff; color: var(--accent-violet); border: 1px solid #ddd6fe; }
+    .tool-vendor-chip.anthropic   { background: #f0faf8; color: var(--accent-teal);   border: 1px solid #a7f3d0; }
+    .tool-vendor-chip.openai      { background: #f5f3ff; color: var(--accent-violet); border: 1px solid #ddd6fe; }
+    .tool-vendor-chip.aws         { background: #fff7ed; color: #c2410c;              border: 1px solid #fed7aa; }
+    .tool-vendor-chip.google      { background: #eff6ff; color: #1d4ed8;              border: 1px solid #bfdbfe; }
+    .tool-vendor-chip.microsoft   { background: #f0f9ff; color: #0369a1;              border: 1px solid #bae6fd; }
+    .tool-vendor-chip.servicenow  { background: #f0fdf4; color: #15803d;              border: 1px solid #bbf7d0; }
+    .tool-vendor-chip.sap         { background: #fefce8; color: #a16207;              border: 1px solid #fde68a; }
+    .tool-vendor-chip.oracle      { background: #fff1f2; color: #be123c;              border: 1px solid #fecdd3; }
+    .tool-vendor-chip.harvey      { background: #f8fafc; color: #475569;              border: 1px solid #cbd5e1; }
+    .tool-vendor-chip.glean       { background: #faf5ff; color: #7c3aed;              border: 1px solid #ddd6fe; }
+    .tool-vendor-chip.vendor-default { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border); }
 
     .sub-offering-index-label {
       font-family: var(--font-mono); font-size: 9px; font-weight: 600;
@@ -465,7 +474,7 @@
           type="text"
           class="role-input"
           id="role-input"
-          placeholder="e.g. Claims Examiner, Nurse, Pharmacy Reviewer…"
+          placeholder="e.g. Claims Examiner, Financial Analyst, Contract Manager, Supply Chain Analyst…"
           autocomplete="off"
           oninput="onRoleInput(this.value)"
           onfocus="openRoleDropdown()"
@@ -549,6 +558,21 @@
       'Prior Authorization Specialist': '✅',
       'Revenue Cycle / Denials Specialist': '💰',
       'Scheduling / Front Office / Patient Access': '📅',
+      'Corporate Counsel': '⚖️',
+      'Paralegal': '📄',
+      'Contract Manager': '📑',
+      'Legal Operations Manager': '🗃️',
+      'Medical Manager': '🔬',
+      'Patient Services Representative': '🏥',
+      'Financial Analyst': '📊',
+      'Risk & Compliance Analyst': '🛡️',
+      'Insurance Underwriter': '📋',
+      'Loan Officer / Credit Analyst': '🏦',
+      'AML / KYC Analyst': '🔍',
+      'HR Business Partner': '👥',
+      'Talent Acquisition Specialist': '🎯',
+      'Supply Chain Analyst': '🔗',
+      'Quality Assurance Engineer': '✔️',
     };
     const PAYER_ROLES = new Set([
       'Utilization Management (UM) Nurse', 'Medical Director / Physician Reviewer',
@@ -559,6 +583,23 @@
       'Physician', 'Nurse', 'Clinical Documentation Improvement (CDI) Specialist',
       'Medical Coder', 'Care Coordinator / Case Manager', 'Prior Authorization Specialist',
       'Revenue Cycle / Denials Specialist', 'Scheduling / Front Office / Patient Access',
+      'Patient Services Representative',
+    ]);
+    const LEGAL_ROLES = new Set([
+      'Corporate Counsel', 'Paralegal', 'Contract Manager', 'Legal Operations Manager',
+    ]);
+    const PHARMA_ROLES = new Set([
+      'Medical Manager',
+    ]);
+    const FINANCE_ROLES = new Set([
+      'Financial Analyst', 'Risk & Compliance Analyst', 'Insurance Underwriter',
+      'Loan Officer / Credit Analyst', 'AML / KYC Analyst',
+    ]);
+    const HR_ROLES = new Set([
+      'HR Business Partner', 'Talent Acquisition Specialist',
+    ]);
+    const MANUFACTURING_ROLES = new Set([
+      'Supply Chain Analyst', 'Quality Assurance Engineer',
     ]);
 
     function withTimeout(promise, ms) {
@@ -619,10 +660,21 @@
         } else {
           const payer    = allRoles.filter(r => PAYER_ROLES.has(r));
           const provider = allRoles.filter(r => PROVIDER_ROLES.has(r));
-          const other    = allRoles.filter(r => !PAYER_ROLES.has(r) && !PROVIDER_ROLES.has(r));
+          const legal    = allRoles.filter(r => LEGAL_ROLES.has(r));
+          const pharma   = allRoles.filter(r => PHARMA_ROLES.has(r));
+          const finance  = allRoles.filter(r => FINANCE_ROLES.has(r));
+          const hr       = allRoles.filter(r => HR_ROLES.has(r));
+          const mfg      = allRoles.filter(r => MANUFACTURING_ROLES.has(r));
+          const known    = new Set([...PAYER_ROLES, ...PROVIDER_ROLES, ...LEGAL_ROLES, ...PHARMA_ROLES, ...FINANCE_ROLES, ...HR_ROLES, ...MANUFACTURING_ROLES]);
+          const other    = allRoles.filter(r => !known.has(r));
           html += renderRoleGroup('Payers', payer);
           html += renderRoleGroup('Providers', provider);
-          if (other.length) html += renderRoleGroup('Other', other);
+          if (legal.length)   html += renderRoleGroup('Legal', legal);
+          if (finance.length) html += renderRoleGroup('Financial Services', finance);
+          if (hr.length)      html += renderRoleGroup('Human Resources', hr);
+          if (mfg.length)     html += renderRoleGroup('Manufacturing & Operations', mfg);
+          if (pharma.length)  html += renderRoleGroup('Pharma / Medical Affairs', pharma);
+          if (other.length)   html += renderRoleGroup('Other', other);
         }
       } else {
         const matches = allRoles.filter(r => r.toLowerCase().includes(q));
@@ -841,11 +893,26 @@
       </div>`;
     }
 
+    function vendorChipInfo(vendor, moduleOffering) {
+      const v = (vendor || '').toLowerCase();
+      if (v.includes('anthropic'))   return { cls: 'anthropic',      icon: '🤖' };
+      if (v.includes('openai'))      return { cls: 'openai',         icon: '💬' };
+      if (v.includes('aws') || v.includes('amazon')) return { cls: 'aws', icon: '☁️' };
+      if (v.includes('google'))      return { cls: 'google',         icon: '🔍' };
+      if (v.includes('microsoft'))   return { cls: 'microsoft',      icon: '🪟' };
+      if (v.includes('servicenow'))  return { cls: 'servicenow',     icon: '⚙️' };
+      if (v.includes('sap'))         return { cls: 'sap',            icon: '🔷' };
+      if (v.includes('oracle'))      return { cls: 'oracle',         icon: '🔴' };
+      if (v.includes('harvey'))      return { cls: 'harvey',         icon: '⚖️' };
+      if (v.includes('glean'))       return { cls: 'glean',          icon: '🔎' };
+      return { cls: 'vendor-default', icon: '🛠' };
+    }
+
     function renderToolCard(t, subOfferingIndex) {
-      const isOpenAI    = (t.vendor || '').toLowerCase().includes('openai');
-      const vendorClass = isOpenAI ? 'openai' : 'anthropic';
-      const vendorLabel = isOpenAI ? 'ChatGPT for Healthcare' : 'Claude for Healthcare';
-      const vendorIcon  = isOpenAI ? '💬' : '🤖';
+      const chip        = vendorChipInfo(t.vendor, t.module_offering);
+      const vendorClass = chip.cls;
+      const vendorIcon  = chip.icon;
+      const vendorLabel = t.module_offering || t.vendor || 'Unknown Vendor';
       const autoPct     = t.automation_percentage || 0;
       const detailId    = `detail-${Math.random().toString(36).slice(2)}`;
 
