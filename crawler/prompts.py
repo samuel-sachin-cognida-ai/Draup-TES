@@ -410,7 +410,7 @@ _DO_NOT_EXTRACT_ENTERPRISE = """\
 # ── Validation / quality prompt template ─────────────────────────────────────
 
 _VALIDATE_AND_QUALITY_SYSTEM_TMPL = """\
-You are a {analyst_role}. You will perform THREE tasks in one pass
+You are a {analyst_role}. You will perform FOUR tasks in one pass
 for "{module_offering}" by {vendor_name}.
 
 You receive:
@@ -510,6 +510,34 @@ STRICT RULES:
   - If nothing confidently missing → return "missing_offerings": []
 
 ════════════════════════════════════════
+TASK 4 — MODULE OFFERING CORRECTION
+════════════════════════════════════════
+The current pass covers entries stored under "{module_offering}".
+For EACH entry that PASSED the legitimacy check, verify that its module_offering
+is correctly assigned.
+
+A mis-assignment occurs when a sub-offering clearly belongs to a DIFFERENT
+industry sector than the one implied by "{module_offering}".
+
+Common patterns to watch for:
+  - A Life Sciences offering (drug discovery, clinical trials, genomics) stored
+    under Healthcare
+  - A Supply Chain offering stored under Manufacturing
+  - An HR / Workforce offering stored under a different sector
+  - A Customer Service offering stored under Financial Services
+
+RULES:
+  - Only flag entries where the mis-assignment is CLEAR and CONFIDENT.
+  - Do NOT flag borderline entries that could reasonably serve both sectors.
+  - The correct_module_offering MUST use the format "{product_brand} for {{Sector}}"
+    where {{Sector}} is exactly one of:
+    Healthcare, Life Sciences, Legal, Financial Services, Manufacturing,
+    Human Resources, Government, Education, Retail, Supply Chain, Energy,
+    Telecommunications, Media & Entertainment, Cybersecurity, Customer Service.
+  - Do NOT include entries that are already correctly assigned to "{module_offering}".
+  - If all entries are correctly assigned → return "corrections": []
+
+════════════════════════════════════════
 OUTPUT FORMAT
 ════════════════════════════════════════
 Return ONLY valid JSON — no markdown, no extra text:
@@ -533,6 +561,14 @@ Return ONLY valid JSON — no markdown, no extra text:
       "sub_offering"  : "exact name as {vendor_name} uses it publicly",
       "reason"        : "1-2 sentences why you believe it exists and is missing",
       "suggested_urls": ["https://..."]
+    }}
+  ],
+  "corrections": [
+    {{
+      "sub_offering"            : "...",
+      "row_ids"                 : [...],
+      "correct_module_offering" : "{product_brand} for {{correct sector}}",
+      "reasoning"               : "1-2 sentences why it belongs to the correct sector"
     }}
   ]
 }}\
@@ -558,6 +594,7 @@ def validate_and_quality_system_prompt(
     ctx = _SECTOR_CONTEXT.get(sector, _SECTOR_CONTEXT["enterprise"])
     return _VALIDATE_AND_QUALITY_SYSTEM_TMPL.format(
         vendor_name=cfg.name,
+        product_brand=cfg.product_brand,
         module_offering=module_offering,
         analyst_role=ctx["analyst_role"],
         scope_check=ctx["scope_check"],

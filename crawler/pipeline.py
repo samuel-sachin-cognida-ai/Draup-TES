@@ -145,6 +145,34 @@ def _bulk_delete(ids: list[int], label: str = "") -> int:
         conn.close()
 
 
+def _bulk_update_module_offering(
+    id_to_mo: list[tuple[int, str]],
+    label: str = "",
+) -> int:
+    """Update module_offering for (id, new_module_offering) pairs. Returns updated count."""
+    if not id_to_mo:
+        return 0
+    conn = db.get_pg_connection()
+    cur  = conn.cursor()
+    try:
+        updated = 0
+        for row_id, new_mo in id_to_mo:
+            cur.execute(
+                "UPDATE extracted_offerings SET module_offering = %s WHERE id = %s;",
+                (new_mo, row_id),
+            )
+            updated += cur.rowcount
+        conn.commit()
+        return updated
+    except Exception as e:
+        conn.rollback()
+        log.error("[%s] Bulk update error: %s", label, e)
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+
 def _token_overlap(a: str, b: str) -> float:
     ta, tb = set(a.split()), set(b.split())
     return len(ta & tb) / min(len(ta), len(tb)) if ta and tb else 0.0
@@ -179,10 +207,11 @@ def _run_pass2(
       1. Language purge
       2. Exact-name dedup
       3. Near-name clustering (token overlap + Jaccard)
-      4. Single LLM call → legitimacy verdicts + semantic dedup + gap analysis
-      5. Apply all deletions atomically
-      6. Targeted re-crawl for missing offerings
-      7. Recurse once if new offerings were added
+      4. Single LLM call → legitimacy + semantic dedup + gap analysis + module_offering correction
+      5. Apply legitimacy deletions and semantic dedup deletions
+      6. Apply module_offering corrections (UPDATE rows to correct sector)
+      7. Targeted re-crawl for missing offerings
+      8. Recurse once if new offerings were added
     """
     label = "VALIDATE+QUALITY" + (" [RERUN]" if _is_rerun else "")
     print("\n" + "=" * 65)
@@ -360,6 +389,28 @@ def _run_pass2(
         print(f"[{label}][SEM-DEDUP] Removed {deleted} semantic duplicate row(s).")
         with lock:
             stats["quality_dupes_removed"] = stats.get("quality_dupes_removed", 0) + deleted
+
+    # ── Apply module_offering corrections ─────────────────────────────────────
+    corrections = result.get("corrections", [])
+    if corrections:
+        print(f"\n[{label}][CORRECTION] {len(corrections)} module_offering correction(s):")
+        id_to_mo: list[tuple[int, str]] = []
+        for c in corrections:
+            name       = c.get("sub_offering", "?")
+            correct_mo = (c.get("correct_module_offering") or "").strip()
+            row_ids    = c.get("row_ids", [])
+            print(f"  [MOVE] {name!r}")
+            print(f"         {module_offering!r} → {correct_mo!r}")
+            print(f"         {c.get('reasoning', '')}")
+            if correct_mo and correct_mo.lower() != module_offering.lower():
+                id_to_mo.extend((rid, correct_mo) for rid in row_ids)
+        if id_to_mo:
+            updated = _bulk_update_module_offering(id_to_mo, label=f"{label}:CORRECTION")
+            print(f"\n[{label}] Corrected module_offering on {updated} row(s).")
+            with lock:
+                stats["corrections_applied"] = stats.get("corrections_applied", 0) + updated
+    else:
+        print(f"[{label}][CORRECTION] All module_offering assignments verified correct.")
 
     # ── Targeted re-crawl for gap analysis ────────────────────────────────────
     missing = result.get("missing_offerings", [])

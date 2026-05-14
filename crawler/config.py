@@ -202,12 +202,15 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         seed_urls=[
             # Top-level industries hub (links to every vertical)
             "https://aws.amazon.com/industries/",
+            # AWS Bedrock hub (all industry AI use cases)
+            "https://aws.amazon.com/bedrock/",
             # Healthcare & Life Sciences
             "https://aws.amazon.com/health/",
             "https://aws.amazon.com/health/generative-ai/",
             "https://aws.amazon.com/healthscribe/",
             "https://aws.amazon.com/healthlake/",
             "https://aws.amazon.com/comprehend/medical/",
+            "https://aws.amazon.com/transcribe/medical/",
             "https://aws.amazon.com/health/life-sciences/",
             # Financial Services
             "https://aws.amazon.com/financial-services/",
@@ -215,6 +218,7 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
             "https://aws.amazon.com/financial-services/banking/",
             "https://aws.amazon.com/financial-services/insurance/",
             "https://aws.amazon.com/financial-services/capital-markets/",
+            "https://aws.amazon.com/fraud-detector/",
             # Manufacturing & Supply Chain
             "https://aws.amazon.com/manufacturing/",
             "https://aws.amazon.com/supply-chain/",
@@ -232,7 +236,7 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         allowed_domains=["aws.amazon.com"],
         allowed_path_prefixes=[
             "/industries", "/health", "/healthlake", "/healthscribe",
-            "/comprehend/medical", "/transcribe/medical",
+            "/comprehend/medical", "/transcribe/medical", "/transcribe",
             "/solutions/health", "/blogs/industries",
             "/financial-services", "/solutions/financial-services",
             "/manufacturing", "/supply-chain",
@@ -241,6 +245,8 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
             "/government-education",
             "/energy",
             "/about-aws/whats-new",
+            "/bedrock",
+            "/fraud-detector",
         ],
         blocked_path_patterns=[
             r"/pricing", r"/faqs$", r"/free",
@@ -277,6 +283,20 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         product_brand="Google Gemini",
         sector="enterprise",
         seed_urls=[
+            # ── New domains first — guaranteed to be reached within max_pages ──
+            # Workspace: Legal/Finance/Healthcare sub-offerings + NotebookLM
+            "https://workspace.google.com/solutions/legal/",
+            "https://workspace.google.com/solutions/finance/",
+            "https://workspace.google.com/solutions/healthcare/",
+            "https://workspace.google.com/products/notebooklm/",
+            "https://notebooklm.google.com/",
+            # DeepMind: AlphaFold
+            "https://deepmind.google/technologies/alphafold/",
+            # blog.google health: Med-Gemini, TxGemma, AMIE
+            "https://blog.google/technology/health/",
+            # ai.google: MedGemma
+            "https://ai.google/discover/medgemma",
+            # ── Original cloud.google.com seeds (unchanged) ───────────────────
             # Top-level industries hub
             "https://cloud.google.com/industries",
             # Healthcare & Life Sciences
@@ -307,22 +327,35 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
             "https://cloud.google.com/blog/topics/financial-services",
             "https://cloud.google.com/customers",
         ],
-        allowed_domains=["cloud.google.com", "health.google", "blog.google", "ai.google"],
+        allowed_domains=[
+            "cloud.google.com", "health.google", "blog.google", "ai.google",
+            "workspace.google.com",
+            "deepmind.google",
+            "notebooklm.google.com",
+        ],
         allowed_path_prefixes=[
+            # Original paths (unchanged)
             "/industries", "/solutions", "/use-cases",
             "/healthcare", "/healthcare-api", "/healthcare-data-engine", "/medical-imaging",
             "/blog/topics", "/blog/products/google-cloud",
             "/health", "/technology/health",
             "/customers",
+            # Added for new domains
+            "/products",       # workspace.google.com/products/notebooklm/
+            "/gemini",         # workspace.google.com/gemini/
+            "/discover",       # ai.google/discover/medgemma, deepmind.google/discover/
+            "/technologies",   # deepmind.google/technologies/alphafold/
+            "/enterprise",     # notebooklm.google.com/enterprise/
         ],
         blocked_path_patterns=[
-            r"/pricing", r"/billing", r"/legal", r"/terms",
+            r"/pricing", r"/billing", r"/terms",
             r"^/vertex-ai$", r"^/products/gemini$",
         ],
         disallowed_terms=[],
         too_generic_terms=_GENERIC_TERMS,
         browser_mode="stealth",
         link_keywords=[
+            # Original keywords (unchanged)
             "health", "clinical", "medical", "patient", "hospital", "hipaa",
             "ehr", "fhir", "care", "medlm", "medgemma", "scribe",
             "radiology", "imaging", "payer", "provider", "claims",
@@ -338,9 +371,15 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
             "education", "university", "school",
             "energy", "utilities",
             "industry", "industries", "customers",
+            # Added for Excel coverage
+            "txgemma", "alphafold", "deepmind", "amie", "med-gemini",
+            "notebooklm", "workspace", "agentspace",
+            "aml", "anti-money", "underwriting",
+            "ambient", "digital-front-door",
+            "document-ai",
         ],
-        target_sub_offerings=80,
-        max_pages=60,
+        target_sub_offerings=100,
+        max_pages=80,
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -378,6 +417,8 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
             "https://www.microsoft.com/en-us/education",
             # Energy
             "https://www.microsoft.com/en-us/industry/energy",
+            # Azure AI services hub (cross-sector AI products)
+            "https://azure.microsoft.com/en-us/solutions/ai/",
         ],
         allowed_domains=["microsoft.com", "www.microsoft.com", "azure.microsoft.com"],
         allowed_path_prefixes=[
