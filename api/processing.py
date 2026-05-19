@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import db
 from api.matching import match_single_task_with_llm
+from api.scoring import get_role_domain, compute_task_coverage_pct, compute_tes_score, industry_match_val
 
 
 def _enrich_cap_details_with_source(
@@ -55,6 +56,10 @@ def _build_tool_response(t: dict, source_evidence: str | None = None) -> dict:
         "reasoning":              t.get("reasoning"),
         "limitations":            t.get("limitations"),
         "source_evidence":        source_evidence or t.get("source_evidence"),
+        "task_coverage_pct":      t.get("task_coverage_pct"),
+        "tes_score":              t.get("tes_score"),
+        "evidence_grade":         t.get("evidence_grade"),
+        "evidence_weight":        t.get("evidence_weight"),
     }
 
 
@@ -128,6 +133,42 @@ def process_single_task(
         print(f"[TASK] WARNING – removed {before - len(tools_all)} phantom tool(s)")
     for i, t in enumerate(tools_all, 1):
         t["rank_position"] = i
+
+    # ── Scoring block ──────────────────────────────────────────────────────────
+    _SCORE_FLOOR = 0.30  # worst match in the retrieved set floors at 30%
+
+    catalog = {o["id"]: o for o in relevant_offerings}
+    role_domain = get_role_domain(role)
+
+    # Rank-normalise distances across matched tools: best=1.0, worst=_SCORE_FLOOR
+    distances = [
+        catalog.get(t.get("tool_id"), {}).get("_cosine_distance", 0.5)
+        for t in tools_all
+    ]
+    d_min = min(distances) if distances else 0.0
+    d_max = max(distances) if distances else 1.0
+
+    for t in tools_all:
+        tool_id  = t.get("tool_id")
+        offering = catalog.get(tool_id, {})
+        distance = offering.get("_cosine_distance", 0.5)
+        if d_max > d_min:
+            cosine_sim = 1.0 - (1.0 - _SCORE_FLOOR) * (distance - d_min) / (d_max - d_min)
+        else:
+            cosine_sim = 1.0
+        ind_match  = industry_match_val(role_domain, offering.get("industry", "general"))
+        t["task_coverage_pct"] = compute_task_coverage_pct(cosine_sim, ind_match)
+        t["evidence_weight"]   = offering.get("evidence_weight") if offering.get("evidence_weight") is not None else 0.50
+        t["evidence_grade"]    = offering.get("evidence_grade") or "C"
+
+    tes = compute_tes_score(tools_all)
+    for t in tools_all:
+        t["tes_score"] = tes
+
+    print(f"[SCORE] tes_score={tes:.1f}  tools_scored={len(tools_all)}  role_domain={role_domain}")
+    for t in tools_all:
+        print(f"  tool_id={t.get('tool_id')}  coverage={t.get('task_coverage_pct', 0):.1f}  evidence_weight={t.get('evidence_weight', 0.5)}")
+    # ──────────────────────────────────────────────────────────────────────────
 
     try:
         db.save_task_recommendations(role, task, tools_all, task_embedding)

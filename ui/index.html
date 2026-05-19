@@ -17,7 +17,8 @@
       --ink:           #1a1917;
       --ink-2:         #4a4844;
       --ink-3:         #8a8780;
-      --score-auto:    #b45309;
+      --score-coverage: #0d7c6e;
+      --score-tes:      #0d7c6e;
       --accent-teal:   #0d7c6e;
       --accent-amber:  #b45309;
       --accent-violet: #6d28d9;
@@ -357,14 +358,23 @@
       padding: 2px 7px; flex-shrink: 0; white-space: nowrap; margin-top: 2px;
     }
 
-    .tool-auto-row { margin-bottom: 14px; }
-    .tool-auto-block { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
-    .tool-auto-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
-    .tool-auto-value { font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--score-auto); line-height: 1; }
-    .tool-auto-bar-wrap { width: 80px; }
+    .tool-coverage-row { margin-bottom: 14px; }
+    .tool-coverage-block { display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid #a7f3d0; border-radius: var(--radius-sm); background: #f0faf8; }
+    .tool-coverage-label { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent-teal); }
+    .tool-coverage-value { font-family: var(--font-mono); font-size: 20px; font-weight: 500; color: var(--score-coverage); line-height: 1; }
+    .tool-coverage-bar-wrap { width: 80px; }
     .score-bar-track { height: 3px; background: var(--border); border-radius: 100px; overflow: hidden; }
     .score-bar-fill { height: 100%; border-radius: 100px; width: 0%; transition: width 0.9s cubic-bezier(0.4,0,0.2,1); }
-    .score-bar-fill.auto { background: var(--score-auto); }
+    .score-bar-fill.coverage { background: var(--score-coverage); }
+
+    .tes-score-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 3px;
+      background: var(--surface); border: 1px solid #a7f3d0;
+      flex-shrink: 0; margin-left: auto;
+    }
+    .tes-score-label { font-family: var(--font-mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-teal); }
+    .tes-score-value { font-family: var(--font-mono); font-size: 15px; font-weight: 500; color: var(--score-tes); line-height: 1; }
 
     /* Capability cards — no per-capability score badge */
     .capabilities-section { margin-top: 14px; }
@@ -667,8 +677,8 @@
           const mfg      = allRoles.filter(r => MANUFACTURING_ROLES.has(r));
           const known    = new Set([...PAYER_ROLES, ...PROVIDER_ROLES, ...LEGAL_ROLES, ...PHARMA_ROLES, ...FINANCE_ROLES, ...HR_ROLES, ...MANUFACTURING_ROLES]);
           const other    = allRoles.filter(r => !known.has(r));
-          html += renderRoleGroup('Payers', payer);
-          html += renderRoleGroup('Providers', provider);
+          html += renderRoleGroup('Healthcare Payers', payer);
+          html += renderRoleGroup('Healthcare Providers', provider);
           if (legal.length)   html += renderRoleGroup('Legal', legal);
           if (finance.length) html += renderRoleGroup('Financial Services', finance);
           if (hr.length)      html += renderRoleGroup('Human Resources', hr);
@@ -854,7 +864,7 @@
         data.tasks_from_cache > 0 ? `<span class="meta-chip cached">⚡ ${data.tasks_from_cache} cached</span>` : '',
       ].filter(Boolean).join('');
       document.getElementById('results-meta').innerHTML = chips;
-      document.getElementById('results-body').innerHTML = (data.recommendations || []).map((rec, i) => renderTaskResult(rec, i + 1)).join('');
+      document.getElementById('results-body').innerHTML = (data.tasks || []).map((rec, i) => renderTaskResult(rec, i + 1)).join('');
       section.classList.add('visible');
       section.scrollIntoView({ behavior: 'smooth', block: 'start' });
       setTimeout(() => {
@@ -874,6 +884,13 @@
       const tools = unique.slice(0, 4);
       const hasMatch = tools.length > 0 && (tools[0].tool_id != null);
 
+      const tesScore = allTools.length > 0 && allTools[0].tes_score != null ? allTools[0].tes_score : null;
+      const tesBadgeHtml = tesScore != null ? `
+        <div class="tes-score-badge">
+          <span class="tes-score-label">TES Score</span>
+          <span class="tes-score-value">${tesScore.toFixed(1)}</span>
+        </div>` : '';
+
       const toolsHtml = hasMatch
         ? tools.map((t, i) => renderToolCard(t, i + 1)).join('')
         : `<div class="no-match-card">
@@ -888,6 +905,7 @@
           <div class="task-result-name">${escHtml(rec.task)}</div>
           ${rec.cached ? '<div class="task-result-cached">⚡ cached</div>' : ''}
           ${rec.error ? `<div style="color:var(--accent-red);font-size:11px;">⚠ ${escHtml(rec.error)}</div>` : ''}
+          ${tesBadgeHtml}
         </div>
         <div class="tool-cards">${toolsHtml}</div>
       </div>`;
@@ -913,16 +931,16 @@
       const vendorClass = chip.cls;
       const vendorIcon  = chip.icon;
       const vendorLabel = t.module_offering || t.vendor || 'Unknown Vendor';
-      const autoPct     = t.automation_percentage || 0;
+      const coveragePct = t.task_coverage_pct != null ? t.task_coverage_pct : null;
       const detailId    = `detail-${Math.random().toString(36).slice(2)}`;
 
-      const autoBlockHtml = autoPct > 0 ? `
-        <div class="tool-auto-row">
-          <div class="tool-auto-block">
-            <div class="tool-auto-label">Task automation</div>
-            <div class="tool-auto-value">${autoPct}%</div>
-            <div class="tool-auto-bar-wrap">
-              <div class="score-bar-track"><div class="score-bar-fill auto" data-pct="${autoPct}"></div></div>
+      const coverageBlockHtml = coveragePct != null ? `
+        <div class="tool-coverage-row">
+          <div class="tool-coverage-block">
+            <div class="tool-coverage-label">Task coverage</div>
+            <div class="tool-coverage-value">${coveragePct.toFixed(1)}%</div>
+            <div class="tool-coverage-bar-wrap">
+              <div class="score-bar-track"><div class="score-bar-fill coverage" data-pct="${coveragePct.toFixed(1)}"></div></div>
             </div>
           </div>
         </div>` : '';
@@ -945,14 +963,13 @@
             <span class="tool-vendor-chip ${vendorClass}">${vendorIcon} ${vendorLabel}</span>
           </div>
         </div>
-        ${autoBlockHtml}
+        ${coverageBlockHtml}
         ${capCardsHtml}
         <button class="tool-detail-toggle" onclick="toggleDetail('${detailId}', this)">
           <span class="arrow">▶</span> Overall reasoning &amp; limitations
         </button>
         <div class="tool-detail-body" id="${detailId}">
           ${t.reasoning ? `<div class="detail-section"><div class="detail-section-title">Why this tool fits</div><div class="detail-text">${escHtml(t.reasoning)}</div></div>` : ''}
-          ${t.automation_explanation ? `<div class="detail-section"><div class="detail-section-title">Automation breakdown</div><div class="detail-text">${escHtml(t.automation_explanation)}</div></div>` : ''}
           ${t.limitations ? `<div class="detail-section"><div class="detail-section-title">Overall limitations</div><div class="detail-text limitation">${escHtml(t.limitations)}</div></div>` : ''}
           ${formatSourceEvidence(t.source_evidence)}
         </div>

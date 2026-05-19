@@ -12,6 +12,27 @@ from db.text_utils import normalize_text, clean_string_list, is_english_text, sa
 
 _CAPABILITY_PLACEHOLDER = "no specific capabilities listed"
 
+_HEALTHCARE_KEYS = {"payer", "provider", "patient", "healthcare", "health"}
+_LEGAL_KEYS      = {"legal", "law", "compliance"}
+_FINANCE_KEYS    = {"financial", "finance", "banking", "investment"}
+
+
+def _normalise_industry(focus_list: list) -> str:
+    """Return canonical industry tag from industry_focus list (first non-General value wins)."""
+    for raw in focus_list:
+        if not isinstance(raw, str):
+            continue
+        v = raw.lower().strip()
+        if v == "general":
+            continue
+        if any(k in v for k in _HEALTHCARE_KEYS):
+            return "healthcare"
+        if any(k in v for k in _LEGAL_KEYS):
+            return "legal"
+        if any(k in v for k in _FINANCE_KEYS):
+            return "finance"
+    return "general"
+
 
 # ── Content hashing ────────────────────────────────────────────────────────────
 
@@ -191,6 +212,10 @@ def save_extracted_to_db(
 
             content_hash = offering_content_hash(item)
 
+            from api.scoring import grade_url
+            grade_letter, grade_weight = grade_url(url)
+            industry_val = _normalise_industry(item.get("industry_focus") or [])
+
             try:
                 embedding  = get_offering_embedding(item)
                 similar_id = find_similar_offering(embedding)
@@ -224,8 +249,9 @@ def save_extracted_to_db(
                 """INSERT INTO extracted_offerings
                        (raw_data_id, url, vendor, category, sub_category,
                         module_offering, sub_offering, capabilities,
-                        tasks_examples, content_hash, source_evidence, embedding)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        tasks_examples, content_hash, source_evidence, embedding,
+                        industry, evidence_grade, evidence_weight)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    RETURNING id;""",
                 (
                     raw_data_id, url,
@@ -239,6 +265,9 @@ def save_extracted_to_db(
                     content_hash,
                     item.get("source_evidence"),
                     embedding,
+                    industry_val,
+                    grade_letter,
+                    grade_weight,
                 ),
             )
             row = cur.fetchone()
@@ -331,7 +360,7 @@ def fetch_all_offerings(vendor_filter: str | None = None) -> list[dict]:
             cur.execute(
                 """SELECT id, vendor, category, sub_category,
                           module_offering, sub_offering, capabilities, tasks_examples,
-                          source_evidence, url
+                          source_evidence, url, industry, evidence_grade, evidence_weight
                    FROM extracted_offerings
                    WHERE vendor ILIKE %s
                    ORDER BY id;""",
@@ -341,7 +370,7 @@ def fetch_all_offerings(vendor_filter: str | None = None) -> list[dict]:
             cur.execute(
                 """SELECT id, vendor, category, sub_category,
                           module_offering, sub_offering, capabilities, tasks_examples,
-                          source_evidence, url
+                          source_evidence, url, industry, evidence_grade, evidence_weight
                    FROM extracted_offerings
                    ORDER BY id;"""
             )
@@ -379,6 +408,7 @@ def fetch_relevant_offerings(
         cur.execute(
             f"""SELECT id, vendor, category, sub_category, module_offering, sub_offering,
                        capabilities, tasks_examples, source_evidence, url,
+                       industry, evidence_grade, evidence_weight,
                        embedding <=> %s::vector AS distance
                FROM extracted_offerings
                WHERE embedding IS NOT NULL
@@ -395,7 +425,7 @@ def fetch_relevant_offerings(
         cap_map = fetch_capability_records_for_offerings(offering_ids)
         for r in rows:
             r["capability_records"] = cap_map.get(r["id"], [])
-            r.pop("distance", None)
+            r["_cosine_distance"] = r.pop("distance", 0.5)
         print(f"[VECTOR] Retrieved top {len(rows)} relevant offerings for: {task!r}")
         return rows
     finally:

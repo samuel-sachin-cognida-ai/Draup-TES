@@ -61,6 +61,9 @@ def _create_extracted_offerings(cur) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_extracted_vendor ON extracted_offerings(vendor);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_extracted_module ON extracted_offerings(module_offering);")
     cur.execute("ALTER TABLE extracted_offerings ADD COLUMN IF NOT EXISTS source_evidence TEXT;")
+    cur.execute("ALTER TABLE extracted_offerings ADD COLUMN IF NOT EXISTS industry TEXT DEFAULT 'general';")
+    cur.execute("ALTER TABLE extracted_offerings ADD COLUMN IF NOT EXISTS evidence_grade CHAR(1) DEFAULT 'C';")
+    cur.execute("ALTER TABLE extracted_offerings ADD COLUMN IF NOT EXISTS evidence_weight FLOAT DEFAULT 0.50;")
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     cur.execute("ALTER TABLE extracted_offerings ADD COLUMN IF NOT EXISTS embedding vector(384);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_offerings_embedding ON extracted_offerings USING hnsw (embedding vector_cosine_ops);")
@@ -116,6 +119,8 @@ def _create_task_tool_recommendations(cur) -> None:
         cur.execute(
             f"ALTER TABLE task_tool_recommendations ADD COLUMN IF NOT EXISTS {col} {definition};"
         )
+    cur.execute("ALTER TABLE task_tool_recommendations ADD COLUMN IF NOT EXISTS task_coverage_pct FLOAT;")
+    cur.execute("ALTER TABLE task_tool_recommendations ADD COLUMN IF NOT EXISTS tes_score FLOAT;")
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_rec_role_task_hash
         ON task_tool_recommendations(role_task_hash);

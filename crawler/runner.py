@@ -88,6 +88,7 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
         "quality_dupes_removed": 0,
         "quality_pages_crawled": 0,
         "quality_new_found":     0,
+        "corrections_applied":   0,
     }
     lock        = threading.Lock()
     discovered: set[str] = set()
@@ -140,7 +141,9 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
 
                 if norm in visited:
                     continue
-                if not is_allowed_url(url, cfg):
+                # Seed URLs are always crawled — they were added intentionally.
+                # The path-prefix filter only gates discovered links, not seeds.
+                if norm not in seed_set and not is_allowed_url(url, cfg):
                     continue
                 visited.add(norm)
 
@@ -209,13 +212,14 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
 
     log.info(
         "[DONE] %-30s pages=%d  new=%d  dupes=%d  filtered=%d  removed=%d  "
-        "q_dupes=%d  q_gap_pages=%d  q_new=%d  llm_err=%d",
+        "q_dupes=%d  q_gap_pages=%d  q_new=%d  corrected=%d  llm_err=%d",
         cfg.name,
         stats["pages_visited"], stats["extracted_saved"],
         stats["duplicates_skipped"], stats["filtered_skipped"],
         stats["validated_removed"],
         stats["quality_dupes_removed"], stats["quality_pages_crawled"],
-        stats["quality_new_found"], stats["llm_errors"],
+        stats["quality_new_found"], stats.get("corrections_applied", 0),
+        stats["llm_errors"],
     )
     if discovered:
         log.info(

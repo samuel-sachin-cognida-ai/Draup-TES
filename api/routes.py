@@ -61,7 +61,7 @@ def recommend_tools(req: RecommendRequest):
         "total_tasks":      len(tasks),
         "tasks_from_cache": cached_count,
         "tasks_from_llm":   llm_count,
-        "recommendations":  all_recommendations,
+        "tasks":            all_recommendations,
     }
 
 

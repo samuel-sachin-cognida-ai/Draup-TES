@@ -34,7 +34,9 @@ def fetch_cached_by_embedding(
             f"role={row['role']!r}, task={row['task']!r})"
         )
         cur.execute(
-            """SELECT r.*, eo.source_evidence, eo.url as offering_url
+            """SELECT r.*, r.task_coverage_pct, r.tes_score,
+                      eo.source_evidence, eo.url as offering_url,
+                      eo.evidence_grade, eo.evidence_weight
                FROM task_tool_recommendations r
                LEFT JOIN extracted_offerings eo ON eo.id = r.tool_id
                WHERE r.role = %s AND r.task = %s
@@ -123,8 +125,8 @@ def save_task_recommendations(
                         matched_capabilities,
                         automation_percentage, rank_position,
                         reasoning, limitations, automation_explanation,
-                        task_embedding)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        task_embedding, task_coverage_pct, tes_score)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    RETURNING id;""",
                 (
                     str(uuid.uuid4()), role, task,
@@ -139,6 +141,8 @@ def save_task_recommendations(
                     t.get("limitations"),
                     t.get("automation_explanation"),
                     task_embedding,
+                    t.get("task_coverage_pct"),
+                    t.get("tes_score"),
                 ),
             )
             rec_row = cur.fetchone()
