@@ -17,7 +17,6 @@ from crawler.html_parser import extract_text_from_html
 from crawler.prompts import (
     extraction_system_prompt,
     validate_and_quality_system_prompt,
-    sector_key_from_module_offering,
 )
 from crawler.url_filter import normalize_url, is_allowed_url
 import crawler.state as state
@@ -193,7 +192,6 @@ def _char_jaccard(a: str, b: str) -> float:
 def _run_pass2(
     cfg: VendorConfig,
     module_offering: str,
-    sector: str,
     page: Page,
     visited: set[str],
     discovered: set[str],
@@ -332,7 +330,7 @@ def _run_pass2(
         completion = llm.create_chat_completion(
             model=LLM_MODEL,
             messages=[
-                {"role": "system", "content": validate_and_quality_system_prompt(cfg, module_offering=module_offering, sector=sector)},
+                {"role": "system", "content": validate_and_quality_system_prompt(cfg, module_offering=module_offering)},
                 {"role": "user",   "content": json.dumps(
                     {"offerings": audit_list, "crawled_urls": crawled_urls},
                     indent=2,
@@ -489,7 +487,6 @@ def _run_pass2(
         _run_pass2(
             cfg=cfg,
             module_offering=module_offering,
-            sector=sector,
             page=page,
             visited=visited,
             discovered=discovered,
@@ -539,11 +536,9 @@ def post_vendor_validate_and_quality(
         len(discovered_mos), cfg.product_brand,
     )
     for module_offering in discovered_mos:
-        sector = sector_key_from_module_offering(module_offering, cfg.product_brand)
         _run_pass2(
             cfg=cfg,
             module_offering=module_offering,
-            sector=sector,
             page=page,
             visited=visited,
             discovered=discovered,

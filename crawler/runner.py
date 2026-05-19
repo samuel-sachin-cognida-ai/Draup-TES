@@ -141,7 +141,9 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
 
                 if norm in visited:
                     continue
-                if not is_allowed_url(url, cfg):
+                # Seed URLs are always crawled — they were added intentionally.
+                # The path-prefix filter only gates discovered links, not seeds.
+                if norm not in seed_set and not is_allowed_url(url, cfg):
                     continue
                 visited.add(norm)
 
