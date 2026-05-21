@@ -599,17 +599,32 @@
       'Corporate Counsel', 'Paralegal', 'Contract Manager', 'Legal Operations Manager',
     ]);
     const PHARMA_ROLES = new Set([
-      'Medical Manager',
+      'Medical Manager', 'Pharmaceutical Regulatory Affairs Specialist',
     ]);
     const FINANCE_ROLES = new Set([
       'Financial Analyst', 'Risk & Compliance Analyst', 'Insurance Underwriter',
-      'Loan Officer / Credit Analyst', 'AML / KYC Analyst',
+      'Loan Officer / Credit Analyst', 'AML / KYC Analyst', 'Insurance Claims Processor',
     ]);
     const HR_ROLES = new Set([
       'HR Business Partner', 'Talent Acquisition Specialist',
     ]);
     const MANUFACTURING_ROLES = new Set([
       'Supply Chain Analyst', 'Quality Assurance Engineer',
+    ]);
+    const TECH_ROLES = new Set([
+      'Software Engineer', 'IT Service Desk Analyst', 'SOC Analyst',
+    ]);
+    const CUSTOMER_ROLES = new Set([
+      'Customer Service Manager',
+    ]);
+    const SPARSE_ROLES = new Set([
+      'Broadcast Producer', 'Grid Operations Engineer', 'University Lecturer',
+    ]);
+    const NEGATIVE_ROLES = new Set([
+      'Janitor', 'Electrician',
+    ]);
+    const SILLY_ROLES = new Set([
+      'Pokemon Trainer', 'Medieval Knight', 'Astronaut', 'Business Person',
     ]);
 
     function withTimeout(promise, ms) {
@@ -675,16 +690,26 @@
           const finance  = allRoles.filter(r => FINANCE_ROLES.has(r));
           const hr       = allRoles.filter(r => HR_ROLES.has(r));
           const mfg      = allRoles.filter(r => MANUFACTURING_ROLES.has(r));
-          const known    = new Set([...PAYER_ROLES, ...PROVIDER_ROLES, ...LEGAL_ROLES, ...PHARMA_ROLES, ...FINANCE_ROLES, ...HR_ROLES, ...MANUFACTURING_ROLES]);
+          const tech     = allRoles.filter(r => TECH_ROLES.has(r));
+          const cx       = allRoles.filter(r => CUSTOMER_ROLES.has(r));
+          const sparse   = allRoles.filter(r => SPARSE_ROLES.has(r));
+          const negative = allRoles.filter(r => NEGATIVE_ROLES.has(r));
+          const silly    = allRoles.filter(r => SILLY_ROLES.has(r));
+          const known    = new Set([...PAYER_ROLES, ...PROVIDER_ROLES, ...LEGAL_ROLES, ...PHARMA_ROLES, ...FINANCE_ROLES, ...HR_ROLES, ...MANUFACTURING_ROLES, ...TECH_ROLES, ...CUSTOMER_ROLES, ...SPARSE_ROLES, ...NEGATIVE_ROLES, ...SILLY_ROLES]);
           const other    = allRoles.filter(r => !known.has(r));
           html += renderRoleGroup('Healthcare Payers', payer);
           html += renderRoleGroup('Healthcare Providers', provider);
-          if (legal.length)   html += renderRoleGroup('Legal', legal);
-          if (finance.length) html += renderRoleGroup('Financial Services', finance);
-          if (hr.length)      html += renderRoleGroup('Human Resources', hr);
-          if (mfg.length)     html += renderRoleGroup('Manufacturing & Operations', mfg);
-          if (pharma.length)  html += renderRoleGroup('Pharma / Medical Affairs', pharma);
-          if (other.length)   html += renderRoleGroup('Other', other);
+          if (legal.length)    html += renderRoleGroup('Legal', legal);
+          if (finance.length)  html += renderRoleGroup('Financial Services', finance);
+          if (hr.length)       html += renderRoleGroup('Human Resources', hr);
+          if (mfg.length)      html += renderRoleGroup('Manufacturing & Operations', mfg);
+          if (pharma.length)   html += renderRoleGroup('Pharma / Medical Affairs', pharma);
+          if (tech.length)     html += renderRoleGroup('🧪 Test: Sectors in DB', tech);
+          if (cx.length)       html += renderRoleGroup('🧪 Test: Sectors in DB', cx);
+          if (sparse.length)   html += renderRoleGroup('🧪 Test: Sparse / No Data', sparse);
+          if (negative.length) html += renderRoleGroup('🧪 Test: Negative Cases', negative);
+          if (silly.length)    html += renderRoleGroup('🧪 Test: Silly / Absurd', silly);
+          if (other.length)    html += renderRoleGroup('Other', other);
         }
       } else {
         const matches = allRoles.filter(r => r.toLowerCase().includes(q));

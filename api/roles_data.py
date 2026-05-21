@@ -253,4 +253,181 @@ ROLES_AND_TASKS: dict[str, list[str]] = {
         "Process specialist referrals",
         "Assist with patient documentation",
     ],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ✅ SECTORS THAT SHOULD HAVE DATA — expect strong matches
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── SOFTWARE DEVELOPMENT (should hit GitHub Copilot, Claude Code, Codex, Kiro, Jules, Amazon Q) ──
+
+    "Software Engineer": [
+        "Write and refactor code from natural-language specifications",
+        "Review a pull request and suggest fixes for bugs and style issues",
+        "Debug a failing unit test and identify the root cause",
+        "Generate boilerplate for a new REST API endpoint",
+        "Explain an unfamiliar codebase section to onboard faster",
+        "Write unit tests for an existing function",
+        "Convert a Python script to TypeScript",
+    ],
+
+    # ── IT SERVICE MANAGEMENT (should hit ServiceNow ITSM, Now Assist) ───────
+
+    "IT Service Desk Analyst": [
+        "Triage and classify incoming IT support tickets",
+        "Draft resolution notes for a recurring network connectivity issue",
+        "Escalate a P1 incident to the appropriate on-call team",
+        "Generate a post-incident report summarising root cause and remediation",
+        "Search the knowledge base for a documented fix to a software error",
+        "Update the CMDB with changes from a completed change request",
+    ],
+
+    # ── CYBERSECURITY (should hit Microsoft Security Copilot, Sentinel, Defender) ──
+
+    "SOC Analyst": [
+        "Triage an alert from the SIEM for signs of lateral movement",
+        "Summarise indicators of compromise (IOCs) from a threat intelligence report",
+        "Write a KQL query to hunt for suspicious PowerShell executions",
+        "Draft an incident response runbook for a ransomware containment scenario",
+        "Correlate logs across endpoint, email, and network to investigate a phishing alert",
+        "Prioritise open vulnerabilities by exploitability and business impact",
+    ],
+
+    # ── CUSTOMER SERVICE (should hit ServiceNow CSM, AWS Connect AI) ─────────
+
+    "Customer Service Manager": [
+        "Summarise the top complaint themes from last month's support tickets",
+        "Draft a response template for billing dispute escalations",
+        "Review agent performance metrics and identify coaching opportunities",
+        "Create a self-service FAQ article from resolved ticket data",
+        "Build an escalation routing rule for high-value account issues",
+    ],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ⚠️ SECTORS NOT IN DB / SPARSE — expect few or no strong matches,
+    #    low task_coverage_pct scores, LLM may struggle to match anything real
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── MEDIA & ENTERTAINMENT (sparse — not a primary vendor sector in crawled data) ──
+
+    "Broadcast Producer": [
+        "Write a broadcast script for a nightly news segment",
+        "Schedule guests and coordinate pre-interview briefing documents",
+        "Compile a shot list and edit decision list for a live sports event",
+        "Produce closed-caption files from recorded audio tracks",
+        "Research story background and draft a reporter briefing pack",
+    ],
+
+    # ── ENERGY / UTILITIES (sparse — little vendor data in current DB) ────────
+
+    "Grid Operations Engineer": [
+        "Analyse real-time SCADA telemetry for anomalies in substation load",
+        "Model renewable energy dispatch scenarios for demand forecasting",
+        "Draft an outage notification to downstream industrial customers",
+        "Review protective relay settings for compliance with NERC CIP standards",
+        "Generate a daily grid stability report for operations management",
+    ],
+
+    # ── EDUCATION (sparse — not heavily crawled) ──────────────────────────────
+
+    "University Lecturer": [
+        "Create a course syllabus aligned with learning outcomes",
+        "Design a multiple-choice assessment from lecture slide content",
+        "Provide personalised written feedback on a student essay",
+        "Summarise student survey responses to improve next semester's delivery",
+        "Translate lecture notes into a condensed revision guide",
+    ],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # ❌ NEGATIVE TEST CASES — tasks are real but AI tools genuinely can't help;
+    #    expect empty recommendations or very low scores (< 30%)
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── PURELY PHYSICAL WORK — no enterprise AI tool can automate these ───────
+
+    "Janitor": [
+        "Mop and sanitise hallway floors on each building level",
+        "Empty and replace bin liners across all office areas",
+        "Refill soap dispensers and paper towel holders in restrooms",
+        "Report a broken ceiling tile to the facilities manager",
+        "Set up tables and chairs for a conference room event",
+    ],
+
+    # ── FIELD / PHYSICAL TRADE ROLE — same reasoning ─────────────────────────
+
+    "Electrician": [
+        "Install conduit and pull wire through a commercial building",
+        "Terminate and label a 400-amp panel box",
+        "Troubleshoot a tripped breaker in an industrial machine",
+        "Perform a continuity test on a newly wired circuit",
+        "Read a wiring schematic for a three-phase motor controller",
+    ],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 🤡 SILLY / ABSURD TEST CASES — role or tasks are nonsensical in context;
+    #    system should return no matches or very low scores
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── FICTIONAL / GAME WORLD ────────────────────────────────────────────────
+
+    "Pokemon Trainer": [
+        "Catch a rare Shiny Charizard in the wild",
+        "Build a competitive battle team with optimal EV spreads",
+        "Win the Pokemon League championship tournament",
+        "Trade a Haunter to trigger its Gengar evolution",
+    ],
+
+    # ── HISTORICAL / IMPOSSIBLE CONTEXT ──────────────────────────────────────
+
+    "Medieval Knight": [
+        "Sharpen a broadsword before tomorrow's jousting tournament",
+        "Negotiate a truce between two feuding noble houses",
+        "Train a squire in horseback combat techniques",
+        "Inspect castle battlements for structural weaknesses",
+    ],
+
+    # ── EXTREME SPECIALIST — no enterprise AI vendor covers this domain ───────
+
+    "Astronaut": [
+        "Execute a manual docking procedure with the ISS in orbital approach",
+        "Conduct a 6-hour EVA to replace a solar array panel",
+        "Monitor life-support CO2 scrubber readings during a long-duration mission",
+        "Report anomalous thruster behaviour to Mission Control",
+    ],
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # 🔀 EDGE CASES — tests boundary and cross-sector behaviour
+    # ══════════════════════════════════════════════════════════════════════════
+
+    # ── CROSS-SECTOR ROLE: Legal + Healthcare + Life Sciences ─────────────────
+    # Expect matches from multiple module_offerings across sectors
+
+    "Pharmaceutical Regulatory Affairs Specialist": [
+        "Prepare a drug submission dossier for FDA 510(k) review",
+        "Draft a regulatory response to a CRL (Complete Response Letter)",
+        "Review labelling changes for compliance with ICH guidelines",
+        "Track global regulatory intelligence for a new biologics product",
+        "Coordinate cross-functional teams for a clinical trial protocol amendment",
+        "Conduct a gap analysis against EMA Module 2 CTD requirements",
+    ],
+
+    # ── VAGUE / ULTRA-GENERIC ROLE — tasks are too broad to match well ────────
+    # Expect low-confidence results; LLM will try but scores should be weak
+
+    "Business Person": [
+        "Do business stuff",
+        "Make more money for the company",
+        "Attend meetings and take notes",
+        "Send emails to people",
+        "Make decisions",
+    ],
+
+    # ── SEMANTIC DUPLICATE TEST — tasks are the same as Claims Examiner ───────
+    # but worded very differently; should semantically hit the same cached tools
+
+    "Insurance Claims Processor": [
+        "Check whether a submitted claim meets the policy coverage criteria",
+        "Apply benefit rules and adjudicate the claim for payment or denial",
+        "Flag claims with missing or inconsistent documentation for review",
+        "Process a batch of routine claims through the adjudication system",
+    ],
 }
