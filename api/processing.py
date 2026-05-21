@@ -1,9 +1,84 @@
 """Task processing: cache lookup, LLM matching, and response building."""
 from __future__ import annotations
 
+import re
+
 import db
 from api.matching import match_single_task_with_llm
 from api.scoring import get_role_domain, compute_task_coverage_pct, compute_tes_score, industry_match_val
+
+# ── Option 3: Generic-word filter ─────────────────────────────────────────────
+# Generic nouns/adjectives that carry no domain signal on their own.
+_GENERIC_WORDS: frozenset[str] = frozenset({
+    "something", "anything", "everything", "nothing", "stuff", "things", "thing",
+    "tasks", "task", "work", "done", "business", "analysis", "information",
+    "better", "good", "great", "best", "more", "less", "much", "many", "few",
+    "lot", "lots", "various", "certain", "specific", "general", "other",
+    "another", "every", "each", "right", "well", "way", "ways", "kind",
+    "type", "sort", "area", "areas", "aspect", "aspects", "level", "levels",
+})
+# Generic verbs that are too broad on their own (not meaningful without a specific object).
+_GENERIC_VERBS: frozenset[str] = frozenset({
+    "write", "do", "make", "get", "give", "help", "improve", "create",
+    "build", "run", "perform", "complete", "attend", "use", "add", "update",
+    "handle", "manage", "support", "work", "try", "take", "put", "set",
+})
+_STOP_WORDS: frozenset[str] = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "must", "can", "to", "of", "in",
+    "for", "on", "with", "at", "by", "from", "as", "into", "and", "or",
+    "but", "if", "i", "me", "my", "we", "our", "you", "your", "he", "she",
+    "they", "their", "what", "which", "who", "not", "no", "so", "just",
+    "also", "up", "out", "about", "than", "then", "when", "how", "all",
+    "both", "some", "any", "its", "it",
+})
+
+# Minimum characters a task must have after stripping whitespace.
+_MIN_TASK_CHARS = 8
+
+
+def _task_has_specific_content(task: str) -> bool:
+    """Return False when the task carries no actionable domain signal.
+
+    Catches:
+      • Too-short inputs ("x", "?", "help")
+      • Placeholder text ("N/A", "TODO", "TBD")
+      • Generic filler ("write something", "do analysis", "improve stuff")
+    """
+    stripped = task.strip()
+
+    if len(stripped) < _MIN_TASK_CHARS:
+        return False
+
+    upper = stripped.upper()
+    if upper in {"N/A", "NA", "TODO", "TBD", "TBC", "NONE", "NULL", "N.A.", "N.A"}:
+        return False
+
+    # Remove punctuation, lower-case, split into words
+    words = set(re.sub(r"[^a-z\s]", "", stripped.lower()).split())
+    meaningful = words - _STOP_WORDS
+
+    # No meaningful words at all
+    if not meaningful:
+        return False
+
+    # All meaningful words are generic filler (nouns) or generic verbs → no domain signal
+    if meaningful.issubset(_GENERIC_WORDS | _GENERIC_VERBS):
+        return False
+
+    return True
+
+
+# ── Option 4: clarity score threshold ─────────────────────────────────────────
+# LLM-reported scores at or below this value trigger a "too vague" early exit.
+_CLARITY_THRESHOLD = 3
+
+# ── Option 5: coverage threshold ──────────────────────────────────────────────
+# LLM-matched tools with task_coverage_pct at or below this value are discarded.
+# Prevents cross-domain false positives (e.g. Janitor matched to a software tool).
+# Consistent with the >40 qualifying threshold in compute_tes_score.
+_MIN_COVERAGE_PCT = 40.0
 
 
 def _enrich_cap_details_with_source(
@@ -96,6 +171,14 @@ def process_single_task(
 ) -> dict:
     print(f"[TASK] task={task!r}")
 
+    # 0. Option 3: generic-word filter — reject before any DB/LLM call
+    if not _task_has_specific_content(task):
+        print(f"[TASK] Rejected by generic-word filter: {task!r}")
+        return {
+            "task": task, "cached": False, "recommended_tools": [],
+            "note": "Task description is too generic or unclear. Please describe a specific action or workflow.",
+        }
+
     # 1. Semantic vector cache check
     try:
         task_embedding = db.get_task_embedding(role, task)
@@ -123,7 +206,18 @@ def process_single_task(
             "note": "No tools in the catalog yet. Run the crawler first.",
         }
 
-    tools_all = match_single_task_with_llm(role, task, relevant_offerings)
+    llm_result          = match_single_task_with_llm(role, task, relevant_offerings)
+    tools_all           = llm_result["tools"]
+    task_clarity_score  = llm_result.get("task_clarity_score", 10)
+
+    # Option 4: LLM-reported clarity score — discard matches when task is too vague
+    print(f"[TASK] task_clarity_score={task_clarity_score}")
+    if task_clarity_score <= _CLARITY_THRESHOLD:
+        print(f"[TASK] Rejected by clarity score ({task_clarity_score} <= {_CLARITY_THRESHOLD})")
+        return {
+            "task": task, "cached": False, "recommended_tools": [],
+            "note": f"Task description is too vague for reliable matching (clarity {task_clarity_score}/10). Please provide more specific details.",
+        }
 
     # Phantom-tool guard: reject tool_ids not in the top-20 catalog
     valid_catalog_ids = {o["id"] for o in relevant_offerings}
@@ -135,31 +229,25 @@ def process_single_task(
         t["rank_position"] = i
 
     # ── Scoring block ──────────────────────────────────────────────────────────
-    _SCORE_FLOOR = 0.30  # worst match in the retrieved set floors at 30%
-
     catalog = {o["id"]: o for o in relevant_offerings}
     role_domain = get_role_domain(role)
-
-    # Rank-normalise distances across matched tools: best=1.0, worst=_SCORE_FLOOR
-    distances = [
-        catalog.get(t.get("tool_id"), {}).get("_cosine_distance", 0.5)
-        for t in tools_all
-    ]
-    d_min = min(distances) if distances else 0.0
-    d_max = max(distances) if distances else 1.0
 
     for t in tools_all:
         tool_id  = t.get("tool_id")
         offering = catalog.get(tool_id, {})
-        distance = offering.get("_cosine_distance", 0.5)
-        if d_max > d_min:
-            cosine_sim = 1.0 - (1.0 - _SCORE_FLOOR) * (distance - d_min) / (d_max - d_min)
-        else:
-            cosine_sim = 1.0
+        distance   = offering.get("_cosine_distance", 0.5)
+        cosine_sim = 1.0 - distance
         ind_match  = industry_match_val(role_domain, offering.get("industry", "general"))
         t["task_coverage_pct"] = compute_task_coverage_pct(cosine_sim, ind_match)
         t["evidence_weight"]   = offering.get("evidence_weight") if offering.get("evidence_weight") is not None else 0.50
         t["evidence_grade"]    = offering.get("evidence_grade") or "C"
+
+    # Option 5: drop tools that scored below the coverage threshold — these are
+    # cross-domain false positives where the LLM forced a match on weak similarity.
+    before_cov = len(tools_all)
+    tools_all  = [t for t in tools_all if (t.get("task_coverage_pct") or 0) > _MIN_COVERAGE_PCT]
+    if len(tools_all) < before_cov:
+        print(f"[SCORE] Coverage filter: removed {before_cov - len(tools_all)} tool(s) below {_MIN_COVERAGE_PCT}%")
 
     tes = compute_tes_score(tools_all)
     for t in tools_all:

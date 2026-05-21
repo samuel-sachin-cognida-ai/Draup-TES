@@ -57,7 +57,7 @@ def industry_match_val(role_domain: str, offering_industry: str) -> float:
 
 
 def compute_task_coverage_pct(cosine_similarity: float, industry_match: float) -> float:
-    return cosine_similarity * 0.80 + industry_match * 0.20
+    return (cosine_similarity * 0.80 + industry_match * 0.20) * 100
 
 
 def compute_tes_score(tool_scores: list[dict]) -> float:
@@ -65,9 +65,9 @@ def compute_tes_score(tool_scores: list[dict]) -> float:
         return 0.0
 
     coverages = [t.get("task_coverage_pct") or 0.0 for t in tool_scores]
-    best_coverage = max(coverages)
+    best_coverage = max(coverages) / 100.0
 
-    qualifying = [c for c in coverages if c > 0.40]
+    qualifying = [c for c in coverages if c > 40]
     tool_breadth = min(len(qualifying), 5) / 5.0
 
     sorted_tools = sorted(
