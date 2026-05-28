@@ -76,9 +76,8 @@ _CLARITY_THRESHOLD = 3
 
 # ── Option 5: coverage threshold ──────────────────────────────────────────────
 # LLM-matched tools with task_coverage_pct at or below this value are discarded.
-# Prevents cross-domain false positives (e.g. Janitor matched to a software tool).
-# Consistent with the >40 qualifying threshold in compute_tes_score.
-_MIN_COVERAGE_PCT = 40.0
+_MIN_COVERAGE_PCT = 45.0
+
 
 
 def _enrich_cap_details_with_source(
@@ -209,6 +208,8 @@ def process_single_task(
     llm_result          = match_single_task_with_llm(role, task, relevant_offerings)
     tools_all           = llm_result["tools"]
     task_clarity_score  = llm_result.get("task_clarity_score", 10)
+
+    print(f"[LLM] returned {len(tools_all)} tool(s)  clarity={task_clarity_score}  tool_ids={[t.get('tool_id') for t in tools_all]}")
 
     # Option 4: LLM-reported clarity score — discard matches when task is too vague
     print(f"[TASK] task_clarity_score={task_clarity_score}")
