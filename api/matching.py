@@ -74,31 +74,64 @@ their core job function — regardless of what domain or category that tool belo
   no-match sentinel even if some capability text appears similar.
 - When in genuine doubt between a weak match and no match, prefer no match.
 
-TASK FITNESS CHECK:
-Before recommending any tool, independently assess whether the TASK's subject matter is
-genuinely represented in the CATALOG you received — not just whether something sounds loosely
-similar.
-Step 1 — Identify the task's core domain: what field, technology, or subject does this task
-  actually belong to? (e.g. broadcast media, SCADA/grid operations, marine biology, education,
-  agriculture, retail scheduling, real estate, etc.)
-Step 2 — Scan the catalog: do any of the 20 offerings actually address that domain or provide
-  capabilities that directly serve that type of work?
-Step 3 — Apply a strict relevance gate:
-  - If the task domain is absent from the catalog (e.g. the catalog has healthcare and legal
-    tools but the task is about power grid telemetry), return the no-match sentinel.
-  - Keyword coincidence is NOT a match. A tool that mentions "monitoring" or "reporting" does
-    not match a SCADA monitoring task just because both use the word "monitoring".
-  - The catalog tool must address the actual subject matter of the task — not just share
-    surface-level vocabulary.
-  - A weak or tangential connection is not sufficient. Only recommend a tool if you are
-    confident it genuinely covers what the task requires.
-- If the task passes the ROLE FITNESS CHECK but fails the TASK FITNESS CHECK, still return
-  the no-match sentinel. Both checks must pass independently.
+DOMAIN ALIGNMENT CHECK:
+This is a two-step reasoning check. Perform BOTH steps before evaluating any tool.
+
+  STEP 1 — Identify the domain of the ROLE.
+  Ask: what industry or field does this role work in?
+  Derive this purely from the role title — do not look at the task or catalog yet.
+  Examples of how to reason:
+    "Broadcast Producer" → domain: media / broadcast production
+    "Grid Operations Engineer" → domain: energy / utilities
+    "University Lecturer" → domain: education
+    "Clinical Documentation Specialist" → domain: healthcare / clinical documentation
+    "Software Engineer" → domain: software development
+    "Corporate Counsel" → domain: legal
+
+  STEP 2 — For each catalog tool, identify the domain of its module_offering.
+  Ask: what industry or field does this module_offering serve?
+  Derive this from the module_offering name alone — do not look at capabilities yet.
+  Examples:
+    "Prior Authorization AI" → domain: healthcare
+    "AI Code Completion" → domain: software development
+    "Contract Lifecycle Management" → domain: legal
+    "Financial Crime & Compliance" → domain: financial services
+
+  COMPARE: If the domain from Step 1 and the domain from Step 2 do not match, skip that tool
+  entirely. Do not inspect its sub_offering or capabilities at all.
+
+  Only tools where both domains match should proceed to capability-level evaluation.
+
+  Important: generic words like "monitoring", "reporting", "analysis", "documentation",
+  "workflow", or "automation" appear in every domain and do NOT constitute a domain match.
+  The domain of the role and the domain of the module_offering must genuinely align.
+  If no catalog tool's module_offering matches the domain of the role, return the no-match
+  sentinel.
+
+MANUAL TASK CHECK:
+Before evaluating any tool, read the TASK description and determine whether the task is
+a purely manual or physical activity that no software tool can assist with.
+- Ask: does completing this task require physical presence, physical actions, or hands-on
+  operation of real-world objects or equipment?
+- Examples of manual tasks that should return no match:
+    "Mop and sanitise hallway floors" — physical cleaning
+    "Install conduit and pull wire through a commercial building" — physical installation
+    "Terminate and label a 400-amp panel box" — hands-on electrical work
+    "Perform a continuity test on a newly wired circuit" — physical testing
+    "Sharpen a broadsword before tomorrow's jousting tournament" — physical manual work
+    "Conduct a 6-hour EVA to replace a solar array panel" — physical spacewalk
+- Examples of tasks that are NOT manual and should proceed normally:
+    "Draft a prior auth recommendation" — knowledge/document work
+    "Write and refactor code" — digital work
+    "Analyse SCADA telemetry for anomalies" — data analysis (even if domain is sparse)
+    "Review clinical documentation" — knowledge work
+- If the task is purely manual or physical with no digital or knowledge-work component,
+  return the no-match sentinel regardless of what tools are in the catalog.
 
 Rules:
 1. ONLY recommend tools whose capability_records genuinely match BOTH the task AND the role's
-   core function. Both the ROLE FITNESS CHECK and the TASK FITNESS CHECK must pass before
-   recommending any tool.
+   core function. Pass the ROLE FITNESS CHECK, DOMAIN ALIGNMENT CHECK, and MANUAL TASK CHECK
+   before recommending any tool.
 2. tool_id MUST be an integer from the CATALOG — never null unless no match.
 3. sub_offering MUST match the catalog entry exactly — never paraphrase.
 4. capability_details MUST include an entry for every capability in matched_capabilities.
@@ -114,8 +147,12 @@ Rules:
 8. Do NOT invent capabilities that are not listed in the catalog.
 9. rank_position values must be sequential starting at 1 with no gaps.
 10. Always include task_clarity_score even when returning no-match.
-11. Both the ROLE FITNESS CHECK and the TASK FITNESS CHECK are hard gates. A tool must pass
-    both independently. Failing either one means returning the no-match sentinel.
+11. Apply the ROLE FITNESS CHECK: never recommend a tool whose domain is fundamentally
+    misaligned with the role, even if task keywords overlap superficially.
+12. Apply the DOMAIN ALIGNMENT CHECK: derive the domain from the ROLE title, derive the
+    domain from the module_offering, and skip any tool where these domains do not match.
+13. Apply the MANUAL TASK CHECK: if the task is purely physical or manual with no digital
+    or knowledge-work component, return the no-match sentinel immediately.
 """
 
 
