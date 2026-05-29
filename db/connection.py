@@ -1,6 +1,7 @@
 """PostgreSQL connection helpers."""
 from __future__ import annotations
 
+import logging
 import os
 
 import psycopg2
@@ -8,6 +9,8 @@ from psycopg2 import sql
 from dotenv import load_dotenv
 
 load_dotenv()
+
+log = logging.getLogger("tes.db.connection")
 
 PG_HOST     = os.getenv("PG_HOST", "localhost")
 PG_PORT     = os.getenv("PG_PORT", "5432")
@@ -28,7 +31,7 @@ def _ensure_database_exists() -> None:
         cur.execute("SELECT 1 FROM pg_database WHERE datname = %s;", (PG_DBNAME,))
         if not cur.fetchone():
             cur.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(PG_DBNAME)))
-            print(f"[DB] Created database '{PG_DBNAME}'.")
+            log.info("Auto-created database '%s'.", PG_DBNAME)
     finally:
         cur.close()
         conn.close()
@@ -36,17 +39,37 @@ def _ensure_database_exists() -> None:
 
 def get_pg_connection():
     try:
-        return psycopg2.connect(
+        conn = psycopg2.connect(
             host=PG_HOST, port=PG_PORT,
             dbname=PG_DBNAME, user=PG_USER, password=PG_PASSWORD,
             connect_timeout=5,
         )
+        log.debug(
+            "Connection opened to %s:%s/%s as user '%s'.",
+            PG_HOST, PG_PORT, PG_DBNAME, PG_USER,
+        )
+        return conn
     except psycopg2.OperationalError as e:
         if "does not exist" not in str(e):
+            log.critical(
+                "Cannot connect to PostgreSQL at %s:%s (db='%s', user='%s'). "
+                "Check PG_HOST, PG_PORT, PG_DBNAME, PG_USER and PG_PASSWORD env vars.",
+                PG_HOST, PG_PORT, PG_DBNAME, PG_USER,
+                exc_info=True,
+            )
             raise
-        print(f"[DB] Database '{PG_DBNAME}' not found – creating it…")
+        log.info(
+            "Database '%s' not found – attempting to auto-create it.",
+            PG_DBNAME,
+        )
         _ensure_database_exists()
-        return psycopg2.connect(
+        conn = psycopg2.connect(
             host=PG_HOST, port=PG_PORT,
             dbname=PG_DBNAME, user=PG_USER, password=PG_PASSWORD,
         )
+        log.info("Successfully connected to newly created database '%s'.", PG_DBNAME)
+        log.debug(
+            "Connection opened to %s:%s/%s as user '%s'.",
+            PG_HOST, PG_PORT, PG_DBNAME, PG_USER,
+        )
+        return conn

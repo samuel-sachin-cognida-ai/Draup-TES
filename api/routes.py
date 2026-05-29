@@ -1,6 +1,8 @@
 """FastAPI route handlers."""
 from __future__ import annotations
 
+import logging
+
 import psycopg2.extras
 from fastapi import HTTPException, Query
 
@@ -9,6 +11,8 @@ from api.app import app
 from api.models import RecommendRequest
 from api.processing import process_single_task, rows_to_tool_list
 from api.roles_data import ROLES_AND_TASKS
+
+log = logging.getLogger("tes.api.routes")
 
 
 @app.post("/recommend-tools")
@@ -29,19 +33,17 @@ def recommend_tools(req: RecommendRequest):
     if not tasks:
         raise HTTPException(status_code=400, detail="At least one non-empty task is required.")
 
-    print(f"\n{'=' * 60}")
-    print(f"[API] role={role!r}  tasks={len(tasks)}  vendor={vendor!r}")
-    print(f"{'=' * 60}")
+    log.info("Request received: role=%r tasks=%d vendor=%r", role, len(tasks), vendor)
 
     all_recommendations: list[dict] = []
     cached_count = llm_count = 0
 
     for i, task in enumerate(tasks, 1):
-        print(f"\n--- Task {i}/{len(tasks)} ---")
+        log.debug("Processing task %d/%d: %r", i, len(tasks), task)
         try:
             result = process_single_task(role, task, vendor)
         except Exception as e:
-            print(f"[API] Error processing task {i}: {e}")
+            log.error("Task %d/%d failed: %s", i, len(tasks), e, exc_info=True)
             result = {"task": task, "cached": False, "recommended_tools": [], "error": str(e)}
 
         if result.get("cached"):
@@ -51,9 +53,7 @@ def recommend_tools(req: RecommendRequest):
 
         all_recommendations.append(result)
 
-    print(f"\n{'=' * 60}")
-    print(f"[API] Done. cached={cached_count}  llm_calls={llm_count}")
-    print(f"{'=' * 60}\n")
+    log.info("Request complete: cached=%d llm_calls=%d", cached_count, llm_count)
 
     return {
         "role":             role,
@@ -74,6 +74,7 @@ def health_check():
 @app.get("/stats")
 def get_stats():
     """Return total capability_records count and distinct cached (role, task) count."""
+    log.debug("GET /stats — fetching capability and cache counts")
     conn = db.get_pg_connection()
     cur  = conn.cursor()
     try:
@@ -121,7 +122,7 @@ def tasks_for_role(role: str = Query(..., description="Role name")):
                 cur.close()
                 conn.close()
         except Exception as _e:
-            print(f"[TASKS] DB fetch skipped (role not in static data): {_e}")
+            log.debug("DB fetch skipped for role=%r (not in static data): %s", role, _e)
             tasks = []
 
     if not tasks:
@@ -136,6 +137,7 @@ def list_offerings(
     module: str | None = Query(None, description="Filter by module_offering"),
 ):
     """List all extracted offerings. Optionally filter by vendor or module_offering."""
+    log.debug("GET /offerings — vendor=%r module=%r", vendor, module)
     conn = db.get_pg_connection()
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
@@ -169,6 +171,7 @@ def list_cached_recommendations(
     role: str | None = Query(None, description="Filter by role"),
 ):
     """Return all cached (role, task) recommendations, optionally filtered by role."""
+    log.debug("GET /cached-recommendations — role=%r", role)
     conn = db.get_pg_connection()
     cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:

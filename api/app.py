@@ -1,6 +1,7 @@
 """FastAPI application factory — creates and configures the app instance."""
 from __future__ import annotations
 
+import logging
 import os
 
 from fastapi import FastAPI
@@ -10,6 +11,9 @@ from fastapi.staticfiles import StaticFiles
 
 import db
 import llm_client as llm
+from logging_config import setup_logging
+
+log = logging.getLogger("tes.api")
 
 LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 
@@ -33,11 +37,12 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup() -> None:
-    print("[API] Starting up…")
+    setup_logging()
+    log.info("API server starting up ...")
     db.init_db()
-    print(f"[API] LLM base : {llm.LLM_BASE_URL}")
-    print(f"[API] LLM model: {LLM_MODEL}")
-    print("[API] Ready.\n")
+    log.info("LLM base_url=%s", llm.LLM_BASE_URL)
+    log.info("LLM model=%s", LLM_MODEL)
+    log.info("API server ready — all routes registered")
 
 
 # ── Serve UI (must be registered after all API routes) ────────────────────────

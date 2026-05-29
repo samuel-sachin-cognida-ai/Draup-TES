@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 
 import psycopg2.extras
 
 from db.connection import get_pg_connection
 from db.embeddings import get_offering_embedding, get_task_embedding, find_similar_offering
 from db.text_utils import normalize_text, clean_string_list, is_english_text, sanitize_string_field, sanitize_string_list
+
+log = logging.getLogger("tes.db.offerings")
 
 _CAPABILITY_PLACEHOLDER = "no specific capabilities listed"
 
@@ -167,7 +170,7 @@ def save_extracted_to_db(
                 skipped += 1
                 with stats_lock:
                     stats["non_target_skipped"] = stats.get("non_target_skipped", 0) + 1
-                print(f"[FILTER] Skipped (wrong brand/format): {mo_raw!r} / {item.get('sub_offering')!r}")
+                log.debug("Skipped offering — wrong brand or format: module_offering=%r sub_offering=%r", mo_raw, item.get('sub_offering'))
                 continue
 
             item = prepare_offering_for_storage(item)
@@ -199,15 +202,15 @@ def save_extracted_to_db(
             sub_l = sub.lower()
             if any(term in sub_l for term in disallowed_terms):
                 skipped += 1
-                print(f"[FILTER] Rejected (disallowed term): {sub!r}")
+                log.debug("Rejected offering — disallowed term in sub_offering: %r", sub)
                 continue
             if len(sub.split()) <= 2 and any(term == sub_l for term in too_generic_terms):
                 skipped += 1
-                print(f"[FILTER] Rejected (too generic): {sub!r}")
+                log.debug("Rejected offering — too generic (single/double word): %r", sub)
                 continue
             if not caps:
                 skipped += 1
-                print(f"[FILTER] Rejected (no capabilities): {sub!r}")
+                log.debug("Rejected offering — no capabilities extracted: %r", sub)
                 continue
 
             content_hash = offering_content_hash(item)
@@ -220,7 +223,7 @@ def save_extracted_to_db(
                 embedding  = get_offering_embedding(item)
                 similar_id = find_similar_offering(embedding)
             except Exception as e:
-                print(f"[VECTOR] Embedding error, skipping vector check: {e}")
+                log.warning("Embedding error, vector dedup skipped for this offering: %s", e)
                 embedding  = None
                 similar_id = None
 
@@ -241,7 +244,7 @@ def save_extracted_to_db(
                 duplicates += 1
                 with stats_lock:
                     stats["duplicates_skipped"] = stats.get("duplicates_skipped", 0) + 1
-                print(f"[DEDUPE] Semantic duplicate (vector match id={similar_id}): {sub!r}")
+                log.debug("Semantic duplicate detected: sub_offering=%r matched_id=%s", sub, similar_id)
                 discovered_sub_offerings.add(sub.strip().lower())
                 continue
 
@@ -277,7 +280,7 @@ def save_extracted_to_db(
                 with stats_lock:
                     stats["extracted_saved"] = stats.get("extracted_saved", 0) + 1
                 discovered_sub_offerings.add(sub.strip().lower())
-                print(f"[TRACKER] New sub-offering ({len(discovered_sub_offerings)}): {sub}")
+                log.info("New sub-offering saved [%d]: %r", len(discovered_sub_offerings), sub)
                 save_capability_records(
                     cur=cur,
                     offering_id=offering_id,
@@ -289,18 +292,18 @@ def save_extracted_to_db(
 
             if len(discovered_sub_offerings) >= target_sub_offerings:
                 conn.commit()
-                print(f"[TRACKER] TARGET REACHED: {len(discovered_sub_offerings)}/{target_sub_offerings}")
+                log.info("Target reached: %d/%d sub-offerings collected — stopping extraction", len(discovered_sub_offerings), target_sub_offerings)
                 return
 
         conn.commit()
-        if inserted:     print(f"[DB] Saved {inserted} new offering(s) for {url}")
-        if duplicates:   print(f"[DB] Skipped {duplicates} duplicate(s) for {url}")
-        if skipped:      print(f"[DB] Filtered {skipped} offering(s) for {url}")
-        if lang_skipped: print(f"[DB] Rejected {lang_skipped} non-English offering(s) for {url}")
+        if inserted:     log.info("Saved %d new offering(s) from %s", inserted, url)
+        if duplicates:   log.debug("Skipped %d duplicate(s) from %s", duplicates, url)
+        if skipped:      log.debug("Filtered %d offering(s) from %s (brand/term/generic/caps checks)", skipped, url)
+        if lang_skipped: log.warning("Rejected %d non-English offering(s) from %s", lang_skipped, url)
 
     except Exception as e:
         conn.rollback()
-        print(f"[DB] Error saving extracted data for {url}: {e}")
+        log.error("DB write failed, rolled back: url=%s  error=%s", url, e, exc_info=True)
     finally:
         cur.close()
         conn.close()
@@ -395,7 +398,7 @@ def fetch_relevant_offerings(
     try:
         query_embedding = get_task_embedding(role, task)
     except Exception as e:
-        print(f"[VECTOR] Could not generate query embedding, falling back to full catalog: {e}")
+        log.warning("Could not generate query embedding, falling back to full catalog: %s", e)
         return fetch_all_offerings(vendor_filter)
 
     conn = get_pg_connection()
@@ -419,14 +422,14 @@ def fetch_relevant_offerings(
         )
         rows = [dict(r) for r in cur.fetchall()]
         if not rows:
-            print("[VECTOR] No embeddings in DB yet, falling back to full catalog")
+            log.warning("No embeddings found in DB — falling back to full catalog scan (run crawler to generate embeddings)")
             return fetch_all_offerings(vendor_filter)
         offering_ids = [r["id"] for r in rows]
         cap_map = fetch_capability_records_for_offerings(offering_ids)
         for r in rows:
             r["capability_records"] = cap_map.get(r["id"], [])
             r["_cosine_distance"] = r.pop("distance", 0.5)
-        print(f"[VECTOR] Retrieved top {len(rows)} relevant offerings for: {task!r}")
+        log.debug("Vector search complete: top %d offerings retrieved for task=%r", len(rows), task)
         return rows
     finally:
         cur.close()

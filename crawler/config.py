@@ -39,6 +39,8 @@ class VendorConfig:
     link_keywords: list[str] | None     = None
     target_sub_offerings: int           = TARGET_SUB_OFFERINGS
     max_pages: int                      = 0
+    pricing_seed_urls: list[str]        = field(default_factory=list)
+    pricing_max_pages: int              = 3
     sector: str                         = "enterprise"
 
 
@@ -207,6 +209,11 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[
+            "https://www.anthropic.com/pricing",
+            "https://www.anthropic.com/api",
+            "https://www.anthropic.com/team",
+        ],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -308,6 +315,11 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[
+            "https://openai.com/api/pricing/",
+            "https://openai.com/chatgpt/business",
+            "https://openai.com/chatgpt/enterprise",
+        ],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -427,6 +439,10 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[
+            "https://aws.amazon.com/bedrock/pricing/",
+            "https://aws.amazon.com/sagemaker/pricing/",
+        ],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -584,6 +600,10 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[
+            "https://ai.google.dev/gemini-api/docs/pricing",
+            "https://cloud.google.com/vertex-ai/pricing",
+        ],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -707,6 +727,10 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[
+            "https://www.microsoft.com/en-us/microsoft-365/business/compare-all-plans",
+            "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/",
+        ],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -810,6 +834,7 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -914,6 +939,7 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1031,6 +1057,7 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1106,6 +1133,7 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
         ] + _INDUSTRY_LINK_KEYWORDS,
         target_sub_offerings=200,
         max_pages=200,
+        pricing_seed_urls=[],
     ),
 
     # ══════════════════════════════════════════════════════════════════════════
@@ -1176,6 +1204,173 @@ VENDOR_CONFIGS: dict[str, VendorConfig] = {
             # cross-sector
             "industry", "industries", "customers", "solutions",
         ] + _INDUSTRY_LINK_KEYWORDS,
+        target_sub_offerings=200,
+        max_pages=200,
+        pricing_seed_urls=[],
+    ),
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # MICROSOFT AZURE AI  (cloud_platform)
+    # ══════════════════════════════════════════════════════════════════════════
+    "microsoft_azure": VendorConfig(
+        name="Microsoft Azure",
+        slug="microsoft_azure",
+        group="cloud_platform",
+        product_brand="Microsoft Azure AI",
+        sector="enterprise",
+        seed_urls=[
+            # ── Core AI services hub ──────────────────────────────────────────
+            "https://azure.microsoft.com/en-us/solutions/ai/",
+            "https://azure.microsoft.com/en-us/products/ai-foundry/",
+            "https://azure.microsoft.com/en-us/products/ai-services/openai-service/",
+            "https://azure.microsoft.com/en-us/products/machine-learning/",
+            # ── Cognitive / perception services ───────────────────────────────
+            "https://azure.microsoft.com/en-us/products/ai-services/ai-search/",
+            "https://azure.microsoft.com/en-us/products/ai-services/speech-to-text/",
+            "https://azure.microsoft.com/en-us/products/ai-services/language-understanding/",
+            "https://azure.microsoft.com/en-us/products/ai-services/computer-vision/",
+            "https://azure.microsoft.com/en-us/products/ai-services/document-intelligence/",
+            "https://azure.microsoft.com/en-us/products/ai-services/anomaly-detector/",
+            "https://azure.microsoft.com/en-us/products/cognitive-services/",
+            # ── Agent / developer tools ───────────────────────────────────────
+            "https://azure.microsoft.com/en-us/products/ai-services/",
+            # ── Healthcare ────────────────────────────────────────────────────
+            "https://azure.microsoft.com/en-us/products/health-data-services/",
+            "https://www.microsoft.com/en-us/industry/health/microsoft-cloud-for-healthcare",
+            # ── Financial services ────────────────────────────────────────────
+            "https://azure.microsoft.com/en-us/solutions/financial-services/",
+            # ── Manufacturing ─────────────────────────────────────────────────
+            "https://azure.microsoft.com/en-us/solutions/manufacturing/",
+        ],
+        allowed_domains=[
+            "azure.microsoft.com",
+            "microsoft.com",
+            "www.microsoft.com",
+        ],
+        blocked_domains=[
+            "careers.microsoft.com",
+            "support.microsoft.com",
+            "status.azure.com",
+        ],
+        allowed_path_prefixes=[
+            "/en-us/products",
+            "/en-us/solutions",
+            "/en-us/industry",
+            "/en-us/services",
+            "/en-us/microsoft-cloud",
+        ],
+        blocked_path_patterns=[
+            r"/pricing", r"/legal$", r"/careers", r"/support",
+            r"/en-us/microsoft-365",
+            r"/en-us/microsoft-copilot",
+            r"/en-us/dynamics-365",
+        ],
+        disallowed_terms=[],
+        too_generic_terms=_GENERIC_TERMS,
+        browser_mode="headed",
+        extra_wait_ms=15000,
+        link_keywords=[
+            # AI platform / models
+            "azure-openai", "openai-service", "ai-foundry", "model-catalog",
+            "fine-tuning", "prompt-flow", "ai-studio",
+            # ML / MLOps
+            "machine-learning", "mlops", "automl", "designer",
+            "inference", "training", "compute",
+            # Cognitive / perception
+            "cognitive", "vision", "speech", "language", "translator",
+            "document-intelligence", "form-recognizer", "anomaly",
+            "personalizer", "content-moderator",
+            # Search / knowledge
+            "ai-search", "cognitive-search", "semantic", "vector",
+            # Bot / agent
+            "bot-service", "bot-framework", "agent", "copilot",
+            # Data / analytics
+            "synapse", "databricks", "fabric", "data-factory",
+            # Healthcare
+            "health-data", "dicom", "fhir", "healthcare-api",
+            # Security / identity
+            "defender", "sentinel", "purview", "entra",
+            # Cross-sector
+            "solution", "industry", "customers",
+        ] + _INDUSTRY_LINK_KEYWORDS,
+        pricing_seed_urls=[
+            "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/",
+            "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/",
+        ],
+        target_sub_offerings=200,
+        max_pages=200,
+    ),
+
+    # ══════════════════════════════════════════════════════════════════════════
+    # WORKDAY  (enterprise_ai)
+    # ══════════════════════════════════════════════════════════════════════════
+    "workday": VendorConfig(
+        name="Workday",
+        slug="workday",
+        group="enterprise_ai",
+        product_brand="Workday AI",
+        sector="enterprise",
+        seed_urls=[
+            # ── AI / platform hub ─────────────────────────────────────────────
+            "https://www.workday.com/en-us/products/artificial-intelligence.html",
+            "https://www.workday.com/en-us/solutions/function/ai-ml.html",
+            # ── HCM ──────────────────────────────────────────────────────────
+            "https://www.workday.com/en-us/products/human-capital-management/overview.html",
+            "https://www.workday.com/en-us/products/talent-management/overview.html",
+            "https://www.workday.com/en-us/products/workforce-management/overview.html",
+            "https://www.workday.com/en-us/products/payroll/overview.html",
+            "https://www.workday.com/en-us/products/recruiting/overview.html",
+            # ── Finance ───────────────────────────────────────────────────────
+            "https://www.workday.com/en-us/products/financial-management/overview.html",
+            "https://www.workday.com/en-us/products/adaptive-planning/overview.html",
+            "https://www.workday.com/en-us/products/spend-management/overview.html",
+            # ── Industries ────────────────────────────────────────────────────
+            "https://www.workday.com/en-us/industries/healthcare.html",
+            "https://www.workday.com/en-us/industries/financial-services.html",
+            "https://www.workday.com/en-us/industries/education.html",
+            "https://www.workday.com/en-us/industries/government.html",
+            "https://www.workday.com/en-us/industries/technology.html",
+            "https://www.workday.com/en-us/industries/retail.html",
+            # ── Customers / solutions ─────────────────────────────────────────
+            "https://www.workday.com/en-us/customers.html",
+            "https://www.workday.com/en-us/solutions.html",
+        ],
+        allowed_domains=["workday.com", "www.workday.com"],
+        blocked_domains=[],
+        allowed_path_prefixes=[
+            "/en-us/products",
+            "/en-us/industries",
+            "/en-us/solutions",
+            "/en-us/customers",
+        ],
+        blocked_path_patterns=[
+            r"/en-us/company",
+            r"/en-us/careers",
+            r"/en-us/legal",
+            r"/en-us/blog$",
+            r"/en-us/resources$",
+            r"/en-us/events",
+        ],
+        disallowed_terms=[],
+        too_generic_terms=_GENERIC_TERMS,
+        browser_mode="stealth",
+        link_keywords=[
+            # AI / platform
+            "illuminate", "artificial-intelligence", "ai", "ml",
+            "machine-learning", "skills-cloud", "talent-optimization",
+            "people-analytics", "workforce-analytics",
+            # HCM
+            "human-capital", "hcm", "talent", "workforce", "payroll",
+            "benefits", "recruiting", "onboarding", "employee-experience",
+            "performance-management", "learning",
+            # Finance
+            "financial-management", "adaptive-planning", "spend-management",
+            "accounting", "revenue", "procurement", "accounts-payable",
+            "analytics", "reporting",
+            # Developer / integration
+            "extend", "api", "developer", "integration", "connector",
+        ] + _INDUSTRY_LINK_KEYWORDS,
+        pricing_seed_urls=[],   # Workday is contact-sales only
         target_sub_offerings=200,
         max_pages=200,
     ),

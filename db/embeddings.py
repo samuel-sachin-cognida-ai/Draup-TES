@@ -1,8 +1,12 @@
 """Sentence-transformer embedding helpers for semantic similarity."""
 from __future__ import annotations
 
+import logging
+
 from db.connection import get_pg_connection
 from db.text_utils import normalize_text
+
+log = logging.getLogger("tes.db.embeddings")
 
 _embedding_model = None
 
@@ -13,7 +17,9 @@ def _get_embedding_model():
     if _embedding_model is None:
         from sentence_transformers import SentenceTransformer
         _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-        print("[VECTOR] Embedding model loaded (384 dims)")
+        log.info("Embedding model 'all-MiniLM-L6-v2' loaded (384 dims).")
+    else:
+        log.debug("Returning cached embedding model (already loaded).")
     return _embedding_model
 
 
@@ -40,16 +46,28 @@ def find_similar_offering(embedding: list[float], threshold: float = 0.08) -> in
     cur  = conn.cursor()
     try:
         cur.execute(
-            """SELECT id FROM extracted_offerings
+            """SELECT id, (embedding <=> %s::vector) AS dist
+               FROM extracted_offerings
                WHERE embedding <=> %s::vector < %s
                ORDER BY embedding <=> %s::vector
                LIMIT 1;""",
-            (embedding, threshold, embedding),
+            (embedding, embedding, threshold, embedding),
         )
         row = cur.fetchone()
-        return row[0] if row else None
+        if row:
+            offering_id, distance = row
+            log.debug(
+                "Similar offering found: id=%s, cosine_distance=%.4f (threshold=%.4f).",
+                offering_id, distance, threshold,
+            )
+            return offering_id
+        log.debug(
+            "No similar offering found within cosine_distance threshold of %.4f.",
+            threshold,
+        )
+        return None
     except Exception as e:
-        print(f"[VECTOR] Similarity search error: {e}")
+        log.error("Similarity search against extracted_offerings failed.", exc_info=True)
         return None
     finally:
         cur.close()

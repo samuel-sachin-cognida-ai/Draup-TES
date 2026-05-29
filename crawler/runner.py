@@ -23,9 +23,10 @@ from crawler.config import (
 from crawler.fetcher import apply_stealth, get_page_content
 from crawler.html_parser import extract_text_from_html, extract_links, random_ua
 from crawler.pipeline import extract_from_page, post_vendor_validate_and_quality
+from crawler.pricing import crawl_and_extract_pricing
 from crawler.url_filter import normalize_url, is_allowed_url, is_relevant_link
 
-log = logging.getLogger("crawler.runner")
+log = logging.getLogger("tes.crawler.runner")
 
 # JSONL backups land in the data/ directory next to this package
 _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -70,9 +71,11 @@ def _browser_context_kwargs(proxy_url: str) -> dict:
 
 
 def crawl_vendor(cfg: VendorConfig) -> dict:
-    log.info("=" * 70)
-    log.info("[START] %-30s  brand='%s'", cfg.name, cfg.product_brand)
-    log.info("=" * 70)
+    max_pages = cfg.max_pages or MAX_PAGES_PER_VENDOR
+    log.info(
+        "Crawl starting: vendor=%r brand=%r max_pages=%d target_offerings=%d",
+        cfg.name, cfg.product_brand, max_pages, cfg.target_sub_offerings,
+    )
 
     jsonl_path = _jsonl_path(cfg.slug)
     stats: dict = {
@@ -116,23 +119,22 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
             try:
                 page.goto(home, timeout=PAGE_TIMEOUT_MS, wait_until="domcontentloaded")
                 page.wait_for_timeout(random.randint(2500, 4000))
-                log.info("[WARMUP] Session at %s", home)
+                log.info("Browser warmup request: url=%s", home)
             except Exception:
                 pass
 
-        max_pages = cfg.max_pages or MAX_PAGES_PER_VENDOR
         with ThreadPoolExecutor(max_workers=LLM_WORKERS) as executor:
             while frontier and stats["pages_visited"] < max_pages:
                 if state.stop_requested:
-                    log.warning("[STOP] Stopping %s early.", cfg.name)
+                    log.info("Crawl stopping: reason=stop_requested vendor=%r", cfg.name)
                     break
 
                 with lock:
                     current_saved = stats.get("extracted_saved", 0)
                 if current_saved >= cfg.target_sub_offerings:
                     log.info(
-                        "[STOP] Target of %d sub-offerings reached for %s — stopping crawl.",
-                        cfg.target_sub_offerings, cfg.name,
+                        "Crawl stopping: reason=target_reached vendor=%r",
+                        cfg.name,
                     )
                     break
 
@@ -148,9 +150,8 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
                 visited.add(norm)
 
                 log.info(
-                    "[CRAWL] %-12s [%d/%d] %s",
-                    cfg.slug, stats["pages_visited"] + 1,
-                    max_pages, url,
+                    "Crawling [%d/%d]: vendor=%s url=%s",
+                    stats["pages_visited"] + 1, max_pages, cfg.slug, url,
                 )
 
                 html, final_url = get_page_content(page, url, cfg.browser_mode, cfg.extra_wait_ms)
@@ -163,13 +164,12 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
                 text     = extract_text_from_html(html)
                 text_len = len(text.strip())
                 if text_len < 200:
-                    log.info("[SKIP] Too little text (%d chars) — %r … : %s",
-                             text_len, text.strip()[:120], url)
+                    log.warning("Page skipped — too little text: chars=%d url=%s", text_len, url)
                     continue
-                log.info("[TEXT] %s — extracted %d chars", url, text_len)
+                log.info("Text extracted: chars=%d url=%s", text_len, url)
 
                 if not db.is_english_text(text[:500]):
-                    log.info("[SKIP] Non-English: %s", url)
+                    log.warning("Page skipped — non-English content detected: url=%s", url)
                     continue
 
                 effective_url = final_url or url
@@ -207,27 +207,39 @@ def crawl_vendor(cfg: VendorConfig) -> dict:
             cfg, page, visited, discovered, stats, lock, jsonl_path,
         )
 
+        # ── Phase 3: Pricing crawl (runs while browser is still open) ─────────
+        if cfg.pricing_seed_urls:
+            log.info("Phase 3 — Pricing crawl: vendor=%r", cfg.name)
+            try:
+                crawl_and_extract_pricing(cfg, page, stats, lock)
+            except Exception as e:
+                log.error(
+                    "Pricing Phase 3 failed (non-fatal — crawl results still saved): "
+                    "vendor=%r  error=%s", cfg.name, e,
+                    exc_info=True,
+                )
+
         context.close()
         browser.close()
 
     log.info(
-        "[DONE] %-30s pages=%d  new=%d  dupes=%d  filtered=%d  removed=%d  "
-        "q_dupes=%d  q_gap_pages=%d  q_new=%d  corrected=%d  llm_err=%d",
+        "Crawl complete: vendor=%r pages=%d new=%d dupes=%d filtered=%d removed=%d "
+        "llm_errors=%d pricing_saved=%d pricing_unknown=%d",
         cfg.name,
         stats["pages_visited"], stats["extracted_saved"],
         stats["duplicates_skipped"], stats["filtered_skipped"],
         stats["validated_removed"],
-        stats["quality_dupes_removed"], stats["quality_pages_crawled"],
-        stats["quality_new_found"], stats.get("corrections_applied", 0),
         stats["llm_errors"],
+        stats.get("pricing_saved", 0),
+        stats.get("pricing_unknown", 0),
     )
     if discovered:
         log.info(
-            "[OFFERINGS] %d unique sub-offerings for '%s':",
+            "Sub-offerings discovered: count=%d vendor=%r",
             len(discovered), cfg.product_brand,
         )
         for i, name in enumerate(sorted(discovered), 1):
-            log.info("  %2d. %s", i, name)
+            log.debug("  [%d] %s", i, name)
 
     return stats
 
@@ -239,11 +251,8 @@ def _handle_signal(signum, _frame) -> None:
 
 
 def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    from logging_config import setup_logging
+    setup_logging()
 
     # Build a name→slugs index for vendor-name resolution
     _name_index: dict[str, list[str]] = {}

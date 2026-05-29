@@ -1,6 +1,7 @@
 """HTML text extraction and link utilities."""
 from __future__ import annotations
 
+import logging
 import random
 import re
 from urllib.parse import urljoin
@@ -8,6 +9,8 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from crawler.url_filter import normalize_url
+
+log = logging.getLogger("tes.crawler.html")
 
 _UA_POOL = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -77,6 +80,7 @@ def _semantic_cls(class_str: str) -> str:
 
 
 def extract_text_from_html(html: str) -> str:
+    html_size = len(html)
     soup = BeautifulSoup(html, "html.parser")
 
     for tag in _REMOVE_TAGS:
@@ -97,7 +101,9 @@ def extract_text_from_html(html: str) -> str:
 
     text  = soup.get_text(separator="")
     lines = [" ".join(line.split()) for line in text.splitlines()]
-    return "\n".join(line for line in lines if line.strip())
+    result = "\n".join(line for line in lines if line.strip())
+    log.debug("Extracted %d chars from HTML of size %d", len(result), html_size)
+    return result
 
 
 def extract_links(html: str, base_url: str) -> list[str]:
@@ -109,4 +115,5 @@ def extract_links(html: str, base_url: str) -> list[str]:
             continue
         abs_url = urljoin(base_url, href)
         links.append(normalize_url(abs_url))
+    log.debug("Found %d links from base_url=%s", len(links), base_url)
     return links

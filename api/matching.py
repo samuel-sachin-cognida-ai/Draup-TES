@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 import llm_client as llm
+
+log = logging.getLogger("tes.api.matching")
 
 LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 
@@ -164,6 +167,13 @@ def match_single_task_with_llm(
     if not llm.has_llm_client():
         raise RuntimeError("LLM client not configured (LLM_API_KEY missing in .env)")
 
+    log.debug(
+        "LLM matching: role=%r task=%r catalog_size=%d",
+        role,
+        task,
+        len(offerings),
+    )
+
     catalog_lines = []
     for o in offerings:
         cap_records = o.get("capability_records", [])
@@ -197,19 +207,38 @@ def match_single_task_with_llm(
         f"TOOL CATALOG:\n" + "\n".join(catalog_lines)
     )
 
-    completion = llm.create_chat_completion(
-        model=LLM_MODEL,
-        messages=[
-            {"role": "system", "content": MATCHING_SYSTEM_PROMPT},
-            {"role": "user",   "content": user_message},
-        ],
-        temperature=0.0,
-        max_tokens=6000,
-        response_format={"type": "json_object"},
-    )
+    try:
+        completion = llm.create_chat_completion(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "system", "content": MATCHING_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_message},
+            ],
+            temperature=0.0,
+            max_tokens=6000,
+            response_format={"type": "json_object"},
+        )
+    except Exception as e:
+        log.error(
+            "LLM call failed for role=%r task=%r: %s",
+            role,
+            task,
+            e,
+            exc_info=True,
+        )
+        raise
 
     parsed              = llm.parse_json_content(completion)
     tools               = parsed.get("tools", [])
     task_clarity_score  = int(parsed.get("task_clarity_score", 10))
     tools.sort(key=lambda x: x.get("rank_position", 999))
+
+    log.info(
+        "LLM match complete: %d tool(s) returned clarity_score=%d",
+        len(tools),
+        task_clarity_score,
+    )
+    if not tools:
+        log.warning("LLM returned no matching tools for task=%r role=%r", task, role)
+
     return {"tools": tools, "task_clarity_score": task_clarity_score}

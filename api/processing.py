@@ -1,11 +1,16 @@
 """Task processing: cache lookup, LLM matching, and response building."""
 from __future__ import annotations
 
+import logging
+import os as _os
 import re
 
 import db
+import llm_client as _llm
 from api.matching import match_single_task_with_llm
 from api.scoring import get_role_domain, compute_task_coverage_pct, compute_tes_score, industry_match_val
+
+log = logging.getLogger("tes.api.processing")
 
 # ── Option 3: Generic-word filter ─────────────────────────────────────────────
 # Generic nouns/adjectives that carry no domain signal on their own.
@@ -79,6 +84,132 @@ _CLARITY_THRESHOLD = 3
 _MIN_COVERAGE_PCT = 45.0
 
 
+# ── Pricing ────────────────────────────────────────────────────────────────────
+LLM_MODEL = _os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+
+_INFER_PRICING_PROMPT = """\
+You are a pricing estimation assistant for enterprise AI tools.
+
+Given a vendor name and sub-offering, provide your best pricing estimate
+based solely on your training knowledge.
+
+Return ONLY a valid JSON object (not an array) with these exact keys:
+  pricing_model   : pay_per_token | per_seat | tiered | contact_sales | free | usage_based | unknown
+  pricing_summary : <= 25 words describing the cost structure
+  input_cost      : string or null
+  output_cost     : string or null
+  tiers           : [] or [{name, price, features}, ...]
+  notes           : <= 20 words or null
+
+Be honest about uncertainty. If pricing is not public: pricing_model = "contact_sales".
+Return ONLY the JSON object. No markdown. No explanation outside the JSON.
+"""
+
+
+def _infer_pricing_from_llm(vendor: str, sub_offering: str) -> dict | None:
+    """
+    Call the LLM to estimate pricing for a sub-offering when no crawled data exists.
+    Returns a pricing dict or None on failure.
+    """
+    if not _llm.has_llm_client():
+        return None
+    try:
+        completion = _llm.create_chat_completion(
+            model=LLM_MODEL,
+            messages=[
+                {"role": "system", "content": _INFER_PRICING_PROMPT},
+                {"role": "user",   "content": f"Vendor: {vendor}\nSub-offering: {sub_offering}"},
+            ],
+            temperature=0.0,
+            max_tokens=500,
+            response_format={"type": "json_object"},
+        )
+        result = _llm.parse_json_content(completion)
+        if not isinstance(result, dict):
+            log.warning(
+                "LLM pricing inference returned non-dict for %r/%r", vendor, sub_offering
+            )
+            return None
+        log.debug(
+            "LLM pricing inferred: vendor=%r  sub=%r  model=%s",
+            vendor, sub_offering, result.get("pricing_model"),
+        )
+        return result
+    except Exception as e:
+        log.warning(
+            "LLM pricing inference failed for %r/%r: %s", vendor, sub_offering, e
+        )
+        return None
+
+
+def _get_or_infer_pricing(
+    tool_id:      int | None,
+    vendor:       str | None,
+    sub_offering: str | None,
+) -> dict | None:
+    """
+    Return pricing data for a matched tool:
+
+    1. Check offering_pricing table (crawled, confidence=0.90) — return immediately if found
+       and pricing_model is not 'unknown'.
+    2. If missing or pricing_model='unknown': call LLM to infer (confidence=0.30).
+    3. Cache the LLM result so the same query doesn't re-infer next time.
+
+    Returns None if tool_id is None or all attempts fail.
+    """
+    if not tool_id:
+        return None
+
+    # Step 1: DB lookup
+    try:
+        existing = db.fetch_pricing_for_offering(tool_id)
+    except Exception as e:
+        log.warning("Pricing DB lookup failed for tool_id=%s: %s", tool_id, e)
+        existing = None
+
+    if existing and existing.get("pricing_model") not in (None, "unknown"):
+        log.debug(
+            "Pricing found in DB (source=%s confidence=%.2f): tool_id=%s",
+            existing.get("pricing_source"), existing.get("confidence_score", 0), tool_id,
+        )
+        return existing
+
+    # Step 2: LLM inference (only when vendor and sub_offering are known)
+    if not vendor or not sub_offering:
+        return existing  # return what we have (may be None or unknown)
+
+    log.debug(
+        "No crawled pricing for tool_id=%s — inferring via LLM: %r / %r",
+        tool_id, vendor, sub_offering,
+    )
+    inferred = _infer_pricing_from_llm(vendor, sub_offering)
+    if not inferred:
+        return existing
+
+    # Step 3: Cache the inferred result
+    pricing_row = {
+        **inferred,
+        "offering_id":     tool_id,
+        "vendor":          vendor,
+        "sub_offering":    sub_offering,
+        "pricing_source":  "llm_inferred",
+        "confidence_score": db.CONFIDENCE_LLM_INFERRED,
+    }
+    try:
+        db.save_offering_pricing(pricing_row)
+        log.info(
+            "LLM-inferred pricing cached: tool_id=%s  model=%s  confidence=%.2f",
+            tool_id, inferred.get("pricing_model"), db.CONFIDENCE_LLM_INFERRED,
+        )
+    except Exception as e:
+        log.warning("Failed to cache LLM-inferred pricing for tool_id=%s: %s", tool_id, e)
+
+    return {
+        **inferred,
+        "pricing_source":   "llm_inferred",
+        "confidence_score": db.CONFIDENCE_LLM_INFERRED,
+    }
+
 
 def _enrich_cap_details_with_source(
     cap_details: list[dict],
@@ -112,7 +243,7 @@ def _enrich_cap_details_with_source(
             enriched.append(enriched_cd)
         return enriched
     except Exception as e:
-        print(f"[API] Warning: could not enrich capability details: {e}")
+        log.warning("Could not enrich capability details for tool_id=%s: %s", tool_id, e)
         return cap_details
 
 
@@ -134,6 +265,7 @@ def _build_tool_response(t: dict, source_evidence: str | None = None) -> dict:
         "tes_score":              t.get("tes_score"),
         "evidence_grade":         t.get("evidence_grade"),
         "evidence_weight":        t.get("evidence_weight"),
+        "pricing":                t.get("pricing"),
     }
 
 
@@ -144,7 +276,12 @@ def rows_to_tool_list(rows: list[dict]) -> list[dict]:
         cap_details = r.get("capability_details", [])
         if cap_details and not cap_details[0].get("source"):
             cap_details = _enrich_cap_details_with_source(cap_details, r.get("tool_id"))
-        result.append(_build_tool_response({**r, "capability_details": cap_details}))
+        pricing = _get_or_infer_pricing(
+            r.get("tool_id"),
+            r.get("vendor"),
+            r.get("sub_offering"),
+        )
+        result.append(_build_tool_response({**r, "capability_details": cap_details, "pricing": pricing}))
     return result
 
 
@@ -156,8 +293,13 @@ def llm_tools_to_response(tools: list[dict]) -> list[dict]:
         tool_id     = t.get("tool_id")
         offering    = catalog.get(tool_id, {})
         cap_details = _enrich_cap_details_with_source(t.get("capability_details", []), tool_id)
+        pricing = _get_or_infer_pricing(
+            tool_id,
+            t.get("vendor"),
+            t.get("sub_offering"),
+        )
         result.append(_build_tool_response(
-            {**t, "capability_details": cap_details},
+            {**t, "capability_details": cap_details, "pricing": pricing},
             source_evidence=offering.get("source_evidence"),
         ))
     return result
@@ -168,11 +310,11 @@ def process_single_task(
     task: str,
     vendor_filter: str | None = None,
 ) -> dict:
-    print(f"[TASK] task={task!r}")
+    log.info("Processing task: %r", task)
 
     # 0. Option 3: generic-word filter — reject before any DB/LLM call
     if not _task_has_specific_content(task):
-        print(f"[TASK] Rejected by generic-word filter: {task!r}")
+        log.warning("Task rejected by generic-word filter (too vague or generic): %r", task)
         return {
             "task": task, "cached": False, "recommended_tools": [],
             "note": "Task description is too generic or unclear. Please describe a specific action or workflow.",
@@ -183,7 +325,7 @@ def process_single_task(
         task_embedding = db.get_task_embedding(role, task)
         vector_cached  = db.fetch_cached_by_embedding(task_embedding)
     except Exception as e:
-        print(f"[TASK] Vector cache check failed (non-fatal): {e}")
+        log.warning("Vector cache check failed (non-fatal, continuing without cache): %s", e)
         task_embedding = None
         vector_cached  = None
 
@@ -193,11 +335,11 @@ def process_single_task(
                 r for r in vector_cached
                 if (r.get("vendor") or "").lower() == vendor_filter.lower()
             ]
-        print(f"[TASK] Cache HIT (semantic) – {len(vector_cached)} tool(s)")
+        log.info("Cache HIT (semantic vector match): %d tool(s) returned", len(vector_cached))
         return {"task": task, "cached": True, "recommended_tools": rows_to_tool_list(vector_cached)}
 
     # 2. Cache miss — fetch top-20 relevant offerings, then call LLM
-    print("[TASK] Cache MISS – calling LLM")
+    log.info("Cache MISS — calling LLM for fresh match")
     relevant_offerings = db.fetch_relevant_offerings(role, task, top_k=20)
     if not relevant_offerings:
         return {
@@ -209,12 +351,22 @@ def process_single_task(
     tools_all           = llm_result["tools"]
     task_clarity_score  = llm_result.get("task_clarity_score", 10)
 
-    print(f"[LLM] returned {len(tools_all)} tool(s)  clarity={task_clarity_score}  tool_ids={[t.get('tool_id') for t in tools_all]}")
+    log.info(
+        "LLM returned %d tool(s): clarity_score=%d tool_ids=%s",
+        len(tools_all),
+        task_clarity_score,
+        [t.get("tool_id") for t in tools_all],
+    )
 
     # Option 4: LLM-reported clarity score — discard matches when task is too vague
-    print(f"[TASK] task_clarity_score={task_clarity_score}")
+    log.debug("Task clarity score: %d/10", task_clarity_score)
     if task_clarity_score <= _CLARITY_THRESHOLD:
-        print(f"[TASK] Rejected by clarity score ({task_clarity_score} <= {_CLARITY_THRESHOLD})")
+        log.warning(
+            "Task rejected — clarity score too low: %d <= %d threshold: %r",
+            task_clarity_score,
+            _CLARITY_THRESHOLD,
+            task,
+        )
         return {
             "task": task, "cached": False, "recommended_tools": [],
             "note": f"Task description is too vague for reliable matching (clarity {task_clarity_score}/10). Please provide more specific details.",
@@ -225,7 +377,10 @@ def process_single_task(
     before    = len(tools_all)
     tools_all = [t for t in tools_all if t.get("tool_id") in valid_catalog_ids]
     if len(tools_all) < before:
-        print(f"[TASK] WARNING – removed {before - len(tools_all)} phantom tool(s)")
+        log.warning(
+            "Phantom tool guard: removed %d tool(s) with IDs not in top-20 catalog",
+            before - len(tools_all),
+        )
     for i, t in enumerate(tools_all, 1):
         t["rank_position"] = i
 
@@ -248,29 +403,41 @@ def process_single_task(
     before_cov = len(tools_all)
     tools_all  = [t for t in tools_all if (t.get("task_coverage_pct") or 0) > _MIN_COVERAGE_PCT]
     if len(tools_all) < before_cov:
-        print(f"[SCORE] Coverage filter: removed {before_cov - len(tools_all)} tool(s) below {_MIN_COVERAGE_PCT}%")
+        log.warning(
+            "Coverage filter: removed %d tool(s) below %.1f%% threshold",
+            before_cov - len(tools_all),
+            _MIN_COVERAGE_PCT,
+        )
 
     tes = compute_tes_score(tools_all)
     for t in tools_all:
         t["tes_score"] = tes
 
-    print(f"[SCORE] tes_score={tes:.1f}  tools_scored={len(tools_all)}  role_domain={role_domain}")
+    log.info(
+        "Scoring complete: tes_score=%.1f tools=%d role_domain=%s",
+        tes,
+        len(tools_all),
+        role_domain,
+    )
     for t in tools_all:
-        print(f"  tool_id={t.get('tool_id')}  coverage={t.get('task_coverage_pct', 0):.1f}  evidence_weight={t.get('evidence_weight', 0.5)}")
+        log.debug(
+            "  tool_id=%-5s coverage=%.1f%% evidence_weight=%.2f",
+            t.get("tool_id"),
+            t.get("task_coverage_pct", 0),
+            t.get("evidence_weight", 0.5),
+        )
     # ──────────────────────────────────────────────────────────────────────────
 
     try:
         db.save_task_recommendations(role, task, tools_all, task_embedding)
-        print(f"[TASK] Cached {len(tools_all)} tool(s)")
+        log.info("Saved %d tool(s) to recommendation cache", len(tools_all))
     except Exception as e:
-        import traceback
-        print(f"[TASK] ERROR – cache write failed: {e}")
-        traceback.print_exc()
+        log.error("Cache write failed (tools still returned to client): %s", e, exc_info=True)
 
     if vendor_filter:
         tools = [t for t in tools_all if (t.get("vendor") or "").lower() == vendor_filter.lower()]
     else:
         tools = tools_all
 
-    print(f"[TASK] Done – {len(tools)} tool(s) matched")
+    log.info("Task complete: %d tool(s) matched (vendor_filter=%r)", len(tools), vendor_filter)
     return {"task": task, "cached": False, "recommended_tools": llm_tools_to_response(tools)}

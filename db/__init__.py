@@ -29,6 +29,13 @@ from db.recommendations import (
     fetch_cached_by_embedding,
     save_task_recommendations,
 )
+from db.pricing import (
+    save_offering_pricing,
+    fetch_pricing_for_offering,
+    fetch_pricing_for_offerings,
+    CONFIDENCE_CRAWLED,
+    CONFIDENCE_LLM_INFERRED,
+)
 
 __all__ = [
     "get_pg_connection",
@@ -52,4 +59,9 @@ __all__ = [
     "fetch_relevant_offerings",
     "fetch_cached_by_embedding",
     "save_task_recommendations",
+    "save_offering_pricing",
+    "fetch_pricing_for_offering",
+    "fetch_pricing_for_offerings",
+    "CONFIDENCE_CRAWLED",
+    "CONFIDENCE_LLM_INFERRED",
 ]

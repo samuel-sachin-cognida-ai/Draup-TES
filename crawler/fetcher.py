@@ -12,7 +12,7 @@ from playwright.sync_api import Page
 from crawler.config import PAGE_TIMEOUT_MS, PROXY_URL, FLARESOLVERR_URL
 from crawler.html_parser import random_ua, is_blocked_or_error
 
-log = logging.getLogger("crawler.fetcher")
+log = logging.getLogger("tes.crawler.fetcher")
 
 # ── Optional anti-bot libraries ───────────────────────────────────────────────
 try:
@@ -20,21 +20,21 @@ try:
     _HAS_CURL_CFFI = True
 except ImportError:
     _HAS_CURL_CFFI = False
-    print("[WARN] curl_cffi not installed — TLS fingerprint impersonation disabled")
+    log.warning("curl_cffi not installed — TLS fingerprint impersonation disabled")
 
 try:
     import cloudscraper as _cloudscraper_lib
     _HAS_CLOUDSCRAPER = True
 except ImportError:
     _HAS_CLOUDSCRAPER = False
-    print("[WARN] cloudscraper not installed — Cloudflare JS solver disabled")
+    log.warning("cloudscraper not installed — Cloudflare JS solver disabled")
 
 try:
     from playwright_stealth import Stealth
     _HAS_STEALTH = True
 except ImportError:
     _HAS_STEALTH = False
-    print("[WARN] playwright_stealth not installed — stealth mode disabled")
+    log.warning("playwright_stealth not installed — stealth mode disabled")
 
 
 def apply_stealth(context) -> None:
@@ -50,6 +50,7 @@ def http_fetch(url: str, timeout: int = 20) -> str | None:
     """Layer 1: curl_cffi with Chrome TLS impersonation, fallback to urllib."""
     ua = random_ua()
     if _HAS_CURL_CFFI:
+        log.debug("Layer 1a (curl_cffi): attempting url=%s", url)
         try:
             proxies = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
             resp = _curl_requests.get(
@@ -60,10 +61,13 @@ def http_fetch(url: str, timeout: int = 20) -> str | None:
                 headers={"Accept-Language": "en-US,en;q=0.9", "User-Agent": ua},
             )
             if resp.status_code == 200:
+                log.info("Layer 1a (curl_cffi) succeeded: url=%s size=%d chars", url, len(resp.text))
                 return resp.text
+            log.debug("Layer 1a (curl_cffi) non-200: url=%s status=%d", url, resp.status_code)
         except Exception as e:
-            log.debug("[CURL_CFFI] %s: %s", url, e)
+            log.debug("Layer 1a (curl_cffi) error: url=%s error=%s", url, e)
 
+    log.debug("Layer 1b (urllib): attempting url=%s", url)
     try:
         req = UrlRequest(url, headers={
             "User-Agent":      ua,
@@ -72,9 +76,11 @@ def http_fetch(url: str, timeout: int = 20) -> str | None:
             "Cache-Control":   "no-cache",
         })
         with urlopen(req, timeout=timeout) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+            html = resp.read().decode("utf-8", errors="replace")
+            log.info("Layer 1b (urllib) succeeded: url=%s size=%d chars", url, len(html))
+            return html
     except Exception as e:
-        log.debug("[HTTP] Fetch failed for %s: %s", url, e)
+        log.debug("Layer 1b (urllib) error: url=%s error=%s", url, e)
         return None
 
 
@@ -82,6 +88,7 @@ def cloudscraper_fetch(url: str, timeout: int = 30) -> str | None:
     """Layer 2: cloudscraper solves Cloudflare JS challenges."""
     if not _HAS_CLOUDSCRAPER:
         return None
+    log.debug("Layer 2 (cloudscraper): attempting url=%s", url)
     try:
         proxies = {"http": PROXY_URL, "https": PROXY_URL} if PROXY_URL else None
         scraper = _cloudscraper_lib.create_scraper(
@@ -89,10 +96,11 @@ def cloudscraper_fetch(url: str, timeout: int = 30) -> str | None:
         )
         resp = scraper.get(url, timeout=timeout, proxies=proxies)
         if resp.status_code == 200:
-            log.info("[CLOUDSCRAPER] OK for %s", url)
+            log.info("Layer 2 (cloudscraper) succeeded: url=%s size=%d chars", url, len(resp.text))
             return resp.text
+        log.debug("Layer 2 (cloudscraper) non-200: url=%s status=%d", url, resp.status_code)
     except Exception as e:
-        log.debug("[CLOUDSCRAPER] %s: %s", url, e)
+        log.debug("Layer 2 (cloudscraper) error: url=%s error=%s", url, e)
     return None
 
 
@@ -100,6 +108,7 @@ def flaresolverr_fetch(url: str, timeout: int = 60) -> str | None:
     """Layer 3: FlareSolverr reverse-proxy (requires service at FLARESOLVERR_URL)."""
     if not FLARESOLVERR_URL:
         return None
+    log.debug("Layer 3 (flaresolverr): attempting url=%s endpoint=%s", url, FLARESOLVERR_URL)
     try:
         payload = json.dumps({
             "cmd": "request.get",
@@ -114,10 +123,12 @@ def flaresolverr_fetch(url: str, timeout: int = 60) -> str | None:
         with urlopen(req, timeout=timeout + 10) as resp:
             result = json.loads(resp.read().decode())
         if result.get("status") == "ok":
-            log.info("[FLARESOLVERR] OK for %s", url)
-            return result["solution"]["response"]
+            html = result["solution"]["response"]
+            log.info("Layer 3 (flaresolverr) succeeded: url=%s size=%d chars", url, len(html))
+            return html
+        log.debug("Layer 3 (flaresolverr) non-ok status: url=%s result_status=%s", url, result.get("status"))
     except Exception as e:
-        log.debug("[FLARESOLVERR] %s: %s", url, e)
+        log.debug("Layer 3 (flaresolverr) error: url=%s error=%s", url, e)
     return None
 
 
@@ -132,7 +143,8 @@ def http_fetch_all(url: str) -> str | None:
         if html and not is_blocked_or_error(html):
             return html
         if html:
-            log.debug("[BYPASS] %s still blocked after %s", url, label)
+            log.warning("Bypass layer still blocked: url=%s layer=%s — trying next layer", url, label)
+    log.error("All HTTP fetch layers failed: url=%s", url)
     return None
 
 
@@ -218,10 +230,10 @@ def get_page_content(
             final_url = page.url
             html      = page.content()
 
-            log.info("[PAGE] %s — html=%d chars  status=%s", url, len(html), status)
+            log.info("Playwright fetched page: url=%s status=%s size=%d chars", url, status, len(html))
 
             if status in (404, 410, 403, 401):
-                log.debug("[SKIP] HTTP %d for %s", status, url)
+                log.debug("Skipping page with terminal HTTP status: url=%s status=%d", url, status)
                 return None, None
 
             # For headed mode: Cloudflare JS challenge auto-resolves in ~5-10 s but
@@ -230,7 +242,9 @@ def get_page_content(
             if browser_mode == "headed":
                 _lo = html.lower()[:3000]
                 if any(s in _lo for s in ("just a moment", "ray id:", "checking your browser")):
-                    log.info("[CF] Cloudflare interstitial detected — waiting 20 s: %s", url)
+                    log.warning(
+                        "Cloudflare interstitial detected — waiting 20s for auto-resolve: url=%s", url
+                    )
                     page.wait_for_timeout(20_000)
                     try:
                         page.wait_for_load_state("networkidle", timeout=10_000)
@@ -239,16 +253,18 @@ def get_page_content(
                     html = page.content()
 
             if not is_blocked_or_error(html):
+                log.info("Playwright layer succeeded: url=%s final_url=%s size=%d chars", url, final_url, len(html))
                 return html, final_url
 
-            log.info("[FALLBACK] Playwright blocked for %s — trying bypass chain", url)
+            log.warning("Playwright blocked for url=%s — falling back to HTTP bypass chain", url)
             fallback = http_fetch_all(url)
             if fallback:
+                log.info("HTTP bypass chain succeeded after Playwright block: url=%s size=%d chars", url, len(fallback))
                 return fallback, url
 
             if attempt == 0:
                 sleep_t = (2 ** attempt) * random.randint(20, 40)
-                log.info("[BACKOFF] Sleeping %ds before retry for %s", sleep_t, url)
+                log.warning("Backing off %ds before retry: url=%s attempt=%d", sleep_t, url, attempt + 1)
                 time.sleep(sleep_t)
                 try:
                     resp2 = page.goto(url, timeout=60_000, wait_until="domcontentloaded")
@@ -257,21 +273,23 @@ def get_page_content(
                     dismiss_consent_banners(page)
                     html2 = page.content()
                     if not is_blocked_or_error(html2):
+                        log.info("Retry succeeded after backoff: url=%s size=%d chars", url, len(html2))
                         return html2, page.url
                 except Exception:
                     pass
 
-            log.warning("[SKIP] Page inaccessible after retries: %s", url)
+            log.warning("Page inaccessible after all Playwright retries: url=%s", url)
             return None, None
 
         except Exception as e:
             last_exc = e
-            log.debug("[PAGE] Playwright error (attempt %d) for %s: %s", attempt + 1, url, e)
+            log.debug("Playwright exception on attempt %d: url=%s error=%s", attempt + 1, url, e)
             if attempt == 0:
                 continue
 
     fallback = http_fetch_all(url)
     if fallback:
+        log.info("HTTP bypass chain succeeded after Playwright exception: url=%s size=%d chars", url, len(fallback))
         return fallback, url
-    log.debug("[PAGE] All fetch methods failed for %s: %s", url, last_exc)
+    log.error("All fetch methods failed: url=%s last_error=%s", url, last_exc)
     return None, None

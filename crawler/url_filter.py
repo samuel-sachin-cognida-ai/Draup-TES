@@ -1,10 +1,13 @@
 """URL filtering, normalization, and relevance checks."""
 from __future__ import annotations
 
+import logging
 import re
 from urllib.parse import urlparse
 
 from crawler.config import VendorConfig
+
+log = logging.getLogger("tes.crawler.filter")
 
 # Default link-following keywords used when no per-vendor keywords are configured.
 # Covers broad enterprise/industry signals so no valid sector page gets dropped.
@@ -62,25 +65,32 @@ def is_allowed_url(url: str, cfg: VendorConfig) -> bool:
         return False
 
     if parsed.scheme not in ("http", "https"):
+        log.debug("Rejected url=%s reason=non-http scheme=%s", url, parsed.scheme)
         return False
 
     netloc      = parsed.netloc.lower()
     netloc_bare = netloc.removeprefix("www.")
 
     if any(bd in netloc for bd in cfg.blocked_domains):
+        log.debug("Rejected url=%s reason=blocked domain netloc=%s", url, netloc)
         return False
 
     allowed_bare = [d.removeprefix("www.") for d in cfg.allowed_domains]
     if not any(netloc_bare == d or netloc_bare.endswith("." + d) for d in allowed_bare):
+        log.debug("Rejected url=%s reason=domain not in allowlist netloc=%s", url, netloc_bare)
         return False
 
     path = parsed.path.lower()
 
     if any(path.endswith(ext) for ext in _SKIP_EXTENSIONS):
+        ext = next(ext for ext in _SKIP_EXTENSIONS if path.endswith(ext))
+        log.debug("Rejected url=%s reason=bad extension ext=%s", url, ext)
         return False
 
     segments = set(path.strip("/").split("/"))
-    if segments & _GENERIC_SKIP_SEGMENTS:
+    bad_segs = segments & _GENERIC_SKIP_SEGMENTS
+    if bad_segs:
+        log.debug("Rejected url=%s reason=skip segment segments=%s", url, bad_segs)
         return False
 
     if "/" not in cfg.allowed_path_prefixes:
@@ -88,10 +98,15 @@ def is_allowed_url(url: str, cfg: VendorConfig) -> bool:
             path == p.lower().rstrip("/") or path.startswith(p.lower())
             for p in cfg.allowed_path_prefixes
         ):
+            log.debug(
+                "Rejected url=%s reason=bad path prefix path=%s allowed_prefixes=%s",
+                url, path, cfg.allowed_path_prefixes,
+            )
             return False
 
     for pattern in cfg.blocked_path_patterns:
         if re.search(pattern, path):
+            log.debug("Rejected url=%s reason=blocked pattern pattern=%s path=%s", url, pattern, path)
             return False
 
     return True
@@ -103,9 +118,15 @@ def is_relevant_link(
     link_keywords: list[str] | None = None,
 ) -> bool:
     if normalize_url(url) in seed_set:
+        log.debug("Relevant (seed match): url=%s", url)
         return True
     if link_keywords is not None and len(link_keywords) == 0:
         return True
     path = urlparse(url).path.lower()
     keywords = link_keywords if link_keywords is not None else _DEFAULT_LINK_KEYWORDS
-    return any(kw in path for kw in keywords)
+    matched_kw = next((kw for kw in keywords if kw in path), None)
+    if matched_kw:
+        log.debug("Relevant (keyword match): url=%s keyword=%s", url, matched_kw)
+        return True
+    log.debug("Rejected as irrelevant: url=%s path=%s", url, path)
+    return False
